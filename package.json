@@ -1,0 +1,39 @@
+{
+  "name": "video-studio",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.4",
+  "scripts": {
+    "studio": "remotion studio",
+    "voice": "tsx scripts/voice.ts",
+    "render": "tsx scripts/render.ts",
+    "capture-site": "tsx scripts/capture/site.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-three/fiber": "9.8.1",
+    "@remotion/bundler": "4.0.534",
+    "@remotion/cli": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "@remotion/three": "4.0.534",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.534",
+    "three": "0.186.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.2",
+    "@types/three": "0.186.0",
+    "playwright": "1.61.1",
+    "tsx": "4.20.6",
+    "typescript": "7.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

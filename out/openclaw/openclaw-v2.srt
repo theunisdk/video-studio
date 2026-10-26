@@ -1,0 +1,83 @@
+1
+00:00:00,367 --> 00:00:03,200
+Let's look at how an OpenClaw setup works.
+
+2
+00:00:03,200 --> 00:00:06,533
+It's four parts, working together as one assistant.
+
+3
+00:00:07,800 --> 00:00:08,900
+First, OpenClaw.
+
+4
+00:00:08,900 --> 00:00:11,967
+This is the software that runs your assistant.
+
+5
+00:00:11,967 --> 00:00:13,733
+It receives your messages,
+
+6
+00:00:13,733 --> 00:00:16,600
+works out what to do, and sends the replies.
+
+7
+00:00:17,867 --> 00:00:20,167
+OpenClaw needs a computer to run on.
+
+8
+00:00:20,167 --> 00:00:24,133
+That's Hostinger: a computer in the cloud that stays on day and
+
+9
+00:00:24,133 --> 00:00:28,100
+night, so your assistant keeps working even when your laptop is
+
+10
+00:00:28,100 --> 00:00:28,567
+closed.
+
+11
+00:00:29,833 --> 00:00:31,167
+Next, the AI model.
+
+12
+00:00:31,167 --> 00:00:33,600
+This is the intelligence behind it.
+
+13
+00:00:33,600 --> 00:00:37,167
+OpenClaw passes your request to a model like Claude,
+
+14
+00:00:37,167 --> 00:00:40,000
+GPT or Gemini, which works out the answer.
+
+15
+00:00:41,267 --> 00:00:43,600
+And finally, Telegram or WhatsApp.
+
+16
+00:00:43,600 --> 00:00:46,200
+That's how you talk to your assistant,
+
+17
+00:00:46,200 --> 00:00:49,400
+using the chat app that's already on your phone.
+
+18
+00:00:50,667 --> 00:00:51,933
+Put it all together.
+
+19
+00:00:51,933 --> 00:00:55,767
+You send a message, OpenClaw picks it up on its cloud computer,
+
+20
+00:00:55,767 --> 00:00:59,400
+asks the AI model, and the reply comes straight back to your
+
+21
+00:00:59,400 --> 00:00:59,700
+chat.
