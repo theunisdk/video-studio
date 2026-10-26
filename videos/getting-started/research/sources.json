@@ -1,0 +1,19 @@
+{
+  "capturedAt": "2026-10-26T10:09:07.923Z",
+  "pages": [
+    {
+      "url": "https://github.com/theunisdk/video-studio",
+      "finalUrl": "https://github.com/theunisdk/video-studio",
+      "status": 200,
+      "settled": true,
+      "title": "GitHub - theunisdk/video-studio: Ask Claude Code for a video, get a narrated, captioned MP4. Remotion + Three.js + ElevenLabs. · GitHub",
+      "description": "Ask Claude Code for a video, get a narrated, captioned MP4. Remotion + Three.js + ElevenLabs. - theunisdk/video-studio",
+      "files": [
+        "01-theunisdk-video-studio.png",
+        "01-theunisdk-video-studio-full.png",
+        "01-theunisdk-video-studio.txt"
+      ]
+    }
+  ],
+  "failed": []
+}

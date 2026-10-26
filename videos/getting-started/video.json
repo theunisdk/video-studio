@@ -1,0 +1,81 @@
+{
+  "id": "getting-started",
+  "title": "Getting started with Video Studio",
+  "brief": "Generate a quick video tutorial about this public repo (theunisdk/video-studio) and include it in the repo along with OpenClaw.",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "21m00Tcm4TlvDq8ikWAM",
+    "modelId": "eleven_multilingual_v2",
+    "settings": {
+      "stability": 0.5,
+      "similarity_boost": 0.75,
+      "style": 0.2
+    }
+  },
+  "timing": {
+    "leadInSeconds": 0.5,
+    "tailSeconds": 0.9,
+    "outroSeconds": 2.5
+  },
+  "scenes": [
+    {
+      "id": "intro",
+      "kicker": "Video Studio",
+      "headline": "Ask for a video. Get a finished MP4.",
+      "narration": "This is Video Studio. You ask Claude for a video in one sentence, and you get back a finished, narrated MP4.",
+      "minSeconds": 6
+    },
+    {
+      "id": "ask",
+      "kicker": "Step 1 · Ask",
+      "headline": "Open the repo in Claude Code and say what you need.",
+      "narration": "Open the repo in Claude Code and say what you need. A marketing video for a website. A tutorial for your app. Or an explainer from your docs.",
+      "minSeconds": 8
+    },
+    {
+      "id": "research",
+      "kicker": "Step 2 · Research",
+      "headline": "Claude reads your sources and takes real screenshots.",
+      "narration": "Claude starts with research. It visits the website, takes screenshots and reads the pages. For an app, it clicks through in a read-only browser, so nothing gets changed.",
+      "minSeconds": 9
+    },
+    {
+      "id": "script",
+      "kicker": "Step 3 · Script and voice",
+      "headline": "A short script, and a voice-over for every scene.",
+      "narration": "Next, it writes a short script, and records a natural voice-over for each scene with ElevenLabs.",
+      "minSeconds": 6
+    },
+    {
+      "id": "scenes",
+      "kicker": "Step 4 · Scenes",
+      "headline": "Animated in code, timed to the spoken words.",
+      "narration": "The scenes are built in code, with React and Three.js. Every animation is timed to the words, so things appear right as they're said.",
+      "minSeconds": 7
+    },
+    {
+      "id": "render",
+      "kicker": "Step 5 · Render",
+      "headline": "A storyboard first, then the checked MP4.",
+      "narration": "You can review a storyboard first. Then it renders the video with captions, and checks the file before it hands it over.",
+      "minSeconds": 7
+    },
+    {
+      "id": "private",
+      "kicker": "Your videos",
+      "headline": "Your videos stay on your machine.",
+      "narration": "Your videos stay private. They live in folders that git ignores, so only the examples are in the public repo.",
+      "minSeconds": 6
+    },
+    {
+      "id": "start",
+      "kicker": "Get started",
+      "headline": "Clone, install, add your key, and ask.",
+      "narration": "To get started, clone the repo, install it, and add your ElevenLabs key. Then just ask. This video was made exactly that way.",
+      "minSeconds": 8
+    }
+  ]
+}

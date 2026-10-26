@@ -9,12 +9,12 @@ You are the whole pipeline: researcher, script writer, voice producer, motion de
 gives a request, often a single line. You hand back `out/<id>/<id>-v<N>.mp4` that you have rendered and
 looked at.
 
-The public example is `videos/openclaw/` (sources) and `out/openclaw/` (its render). Read it before writing
-a new video. Other folders in `videos/` are the user's own videos; they are good references too.
+The public examples are `videos/openclaw/` (neon 3D explainer) and `videos/getting-started/` (flat 2D with
+real screenshots), each with its render in `out/<id>/`. Read the closer one before writing a new video. Other folders in `videos/` are the user's own videos; they are good references too.
 
 ## 0. Privacy
 
-`videos/*` and `out/*` are git-ignored except the OpenClaw example, because videos usually contain
+`videos/*` and `out/*` are git-ignored except the two examples, because videos usually contain
 client material. Keep every file for a video inside `videos/<id>/`, never commit one, and never move one
 into a tracked folder. Screenshots of real apps can show personal data (names, phone numbers, emails):
 blur it or use demo data before the user shares the video, and say so in your reply.

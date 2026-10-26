@@ -10,20 +10,11 @@ Video Studio is a [Claude Code](https://claude.com/claude-code) project. You ope
 what you want, and Claude does the rest: it researches the subject, writes the script, records the
 voice-over, animates the scenes, renders a 1080p MP4 and checks the result before it hands it back.
 
-![Preview of the OpenClaw example video](assets/openclaw-preview.gif)
+[![The getting-started tour, made with Video Studio](assets/getting-started-preview.gif)](out/getting-started/getting-started-v2.mp4)
 
-The example above is in this repo: the sources are in [`videos/openclaw/`](videos/openclaw/) and the finished
-video is [`out/openclaw/openclaw-v2.mp4`](out/openclaw/openclaw-v2.mp4) (62 seconds, with captions
-and a script). It was made from this four-line brief:
-
-```text
-OpenClaw is the software running your assistant.
-Hostinger is the computer in the cloud that keeps it running.
-An AI model is the intelligence behind it.
-Telegram/Whatsapp is the way to communicate with it.
-```
-
-![Storyboard of the OpenClaw example](assets/openclaw-storyboard.jpg)
+**Watch the 80-second tour, with sound:** [`out/getting-started/getting-started-v2.mp4`](out/getting-started/getting-started-v2.mp4).
+Video Studio made it about itself: Claude took a screenshot of this repo's GitHub page, wrote the script,
+recorded the voice-over and built the scenes. Its sources are in [`videos/getting-started/`](videos/getting-started/).
 
 ## What it makes
 
@@ -40,6 +31,24 @@ Every video gets:
 - a script as Markdown
 - loudness-normalised audio (-16 LUFS)
 - an automatic check of the finished file
+
+## Examples
+
+| Video | Style | Sources | Render |
+|---|---|---|---|
+| Getting started with Video Studio (80 s) | flat 2D with real screenshots | [`videos/getting-started/`](videos/getting-started/) | [`getting-started-v2.mp4`](out/getting-started/getting-started-v2.mp4) |
+| How OpenClaw works (62 s) | neon 3D explainer | [`videos/openclaw/`](videos/openclaw/) | [`openclaw-v2.mp4`](out/openclaw/openclaw-v2.mp4) |
+
+The OpenClaw explainer was made from this four-line brief:
+
+```text
+OpenClaw is the software running your assistant.
+Hostinger is the computer in the cloud that keeps it running.
+An AI model is the intelligence behind it.
+Telegram/Whatsapp is the way to communicate with it.
+```
+
+![Preview of the OpenClaw example video](assets/openclaw-preview.gif)
 
 ## How it works
 
@@ -90,7 +99,7 @@ pnpm exec playwright install chromium     # only for website and app screenshots
 export ELEVENLABS_API_KEY=...             # or keep it in a secrets manager; never commit it
 ```
 
-Render the example to check your setup. It takes a few minutes and writes a new version next to the committed one, `out/openclaw/openclaw-v3.mp4`:
+Render the OpenClaw example to check your setup. It takes a few minutes and writes a new version next to the committed one, `out/openclaw/openclaw-v3.mp4`:
 
 ```bash
 pnpm render openclaw
@@ -109,7 +118,7 @@ give you the path of the finished MP4.
 ## Your videos stay private
 
 Videos often contain client material, so everything under `videos/` and `out/` is git-ignored except the
-OpenClaw example. You can make videos in a clone of this public repo and nothing about them is ever
+two examples (`openclaw` and `getting-started`). You can make videos in a clone of this public repo and nothing about them is ever
 committed. Back those folders up yourself if you need to keep them.
 
 When a video shows a real app, check the screenshots for personal data (names, phone numbers, email
@@ -147,7 +156,7 @@ Every render is a new version (`-v1`, `-v2`, …), so earlier renders are never 
 
 ```text
 .claude/skills/make-video/   the instructions Claude follows
-videos/<id>/                 one folder per video (git-ignored except openclaw)
+videos/<id>/                 one folder per video (git-ignored except the two examples)
   video.json                   script: scenes, narration, headlines, voice
   voice.json                   generated: clip durations and word timings
   Video.tsx                    the scenes
@@ -155,7 +164,7 @@ videos/<id>/                 one folder per video (git-ignored except openclaw)
   audio/                       narration clips
   research/, capture/          website and app screenshots
   NOTES.md                     sources and assumptions
-out/<id>/                    renders (git-ignored except openclaw)
+out/<id>/                    renders (git-ignored except the two examples)
 src/kit/                     reusable scene pieces: 3D objects, people, phones, captions, walkthroughs
 src/video/                   video.json schema, audio-driven timeline, captions
 scripts/                     voice, render, and the read-only capture browser

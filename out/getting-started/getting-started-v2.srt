@@ -1,0 +1,115 @@
+1
+00:00:00,500 --> 00:00:02,233
+This is Video Studio.
+
+2
+00:00:02,233 --> 00:00:04,500
+You ask Claude for a video in one sentence,
+
+3
+00:00:04,500 --> 00:00:06,000
+and you get back a finished,
+
+4
+00:00:06,000 --> 00:00:07,967
+narrated MP4.
+
+5
+00:00:09,400 --> 00:00:12,700
+Open the repo in Claude Code and say what you need.
+
+6
+00:00:12,700 --> 00:00:14,933
+A marketing video for a website.
+
+7
+00:00:14,933 --> 00:00:16,967
+A tutorial for your app.
+
+8
+00:00:16,967 --> 00:00:19,033
+Or an explainer from your docs.
+
+9
+00:00:20,467 --> 00:00:22,267
+Claude starts with research.
+
+10
+00:00:22,267 --> 00:00:26,433
+It visits the website, takes screenshots and reads the pages.
+
+11
+00:00:26,433 --> 00:00:29,567
+For an app, it clicks through in a read-only browser,
+
+12
+00:00:29,567 --> 00:00:31,167
+so nothing gets changed.
+
+13
+00:00:32,600 --> 00:00:35,000
+Next, it writes a short script,
+
+14
+00:00:35,000 --> 00:00:39,100
+and records a natural voice-over for each scene with ElevenLabs.
+
+15
+00:00:40,533 --> 00:00:42,500
+The scenes are built in code,
+
+16
+00:00:42,500 --> 00:00:44,100
+with React and Three.
+
+17
+00:00:44,100 --> 00:00:45,200
+js.
+
+18
+00:00:45,200 --> 00:00:47,900
+Every animation is timed to the words,
+
+19
+00:00:47,900 --> 00:00:50,400
+so things appear right as they're said.
+
+20
+00:00:51,833 --> 00:00:54,000
+You can review a storyboard first.
+
+21
+00:00:54,000 --> 00:00:56,233
+Then it renders the video with captions,
+
+22
+00:00:56,233 --> 00:00:58,700
+and checks the file before it hands it over.
+
+23
+00:01:00,133 --> 00:01:01,900
+Your videos stay private.
+
+24
+00:01:01,900 --> 00:01:04,233
+They live in folders that git ignores,
+
+25
+00:01:04,233 --> 00:01:06,967
+so only the examples are in the public repo.
+
+26
+00:01:08,367 --> 00:01:10,533
+To get started, clone the repo,
+
+27
+00:01:10,533 --> 00:01:13,133
+install it, and add your ElevenLabs key.
+
+28
+00:01:13,133 --> 00:01:14,667
+Then just ask.
+
+29
+00:01:14,667 --> 00:01:17,100
+This video was made exactly that way.

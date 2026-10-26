@@ -4,13 +4,17 @@ node_modules/
 *.tmp
 
 # Videos are private by default: each lives in videos/<id>/ and renders to out/<id>/, and neither is committed.
-# The OpenClaw explainer is the public example, sources and finished render both.
+# The two public examples (the OpenClaw explainer and the getting-started tour) are committed, sources and render.
 videos/*
 !videos/openclaw/
+!videos/getting-started/
 out/*
 !out/openclaw/
 out/openclaw/*
 !out/openclaw/openclaw-v2.*
+!out/getting-started/
+out/getting-started/*
+!out/getting-started/getting-started-v2.*
 videos/openclaw/audio/placeholder-*
 
 # Local only
