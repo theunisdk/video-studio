@@ -7,8 +7,9 @@ const MAX_CHARS = 64;
 const MIN_CLAUSE = 24;
 
 // Splits on sentence ends, then on clause punctuation, then packs words into short cues.
+// Punctuation followed by a non-space ("cat .env", "ficta.sh", "2.5") stays inside the word.
 const chunkText = (text: string): string[] => {
-  const sentences = text.match(/[^.!?]+[.!?]*\s*/g) ?? [text];
+  const sentences = text.match(/(?:[^.!?]|[.!?](?=\S))+[.!?]*\s*/g) ?? [text];
   const chunks: string[] = [];
   for (const sentence of sentences) {
     let current = "";
