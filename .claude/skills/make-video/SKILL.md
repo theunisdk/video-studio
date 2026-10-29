@@ -125,7 +125,8 @@ A series is a saved look, in `series/<name>/`: `design.json` (the tokens), `desi
 its continuity rules), `series.json` (the voice and where it came from), `components/` (series parts such as
 an intro card) and `assets/` (logos, font files). `series/demo/` is the tracked example.
 
-When the request names a series, or says "same style as <id>" (export that video's look first, see below):
+When the request names a series, or says "same style as <id>" (export that video's look first, see below;
+when its `video.json` already names a series, use that series instead):
 
 ```bash
 pnpm series:use <name> <id>     # copies the tokens, components, brand files and design.md into videos/<id>/
@@ -141,11 +142,21 @@ To save a look as a series (when the user asks, or for "same style as <id>"). If
 matches how it looks, starting from the closest entry in the looks library (`neon-3d` for openclaw, `flat-2d`
 for getting-started), then export:
 
+Series parts, such as an intro or outro card, go in `videos/<id>/components/` before you export: export
+copies every `.ts` and `.tsx` file directly in that folder to `series/<name>/components/`, and `series:use`
+copies them into each episode's `videos/<id>/components/`. `Video.tsx` imports them from `./components/...`.
+They import the kit as `../../../src/kit/...`, which resolves from both folders. Only those files travel:
+an image a part needs must be a design file (the logo, a font, a texture).
+
 ```bash
-pnpm series:export <id> <name>  # writes series/<name>/ from videos/<id>/
+pnpm series:export <id> <name>  # writes series/<name>/ from videos/<id>/, and sets "series": "<name>" in its video.json
 ```
 
-Then read `series/<name>/design.md` and tighten its generated Continuity section into real rules.
+The source video becomes the series' first episode, so `pnpm compare` on the next episode finds it.
+`series/<name>/design.md` starts with a Continuity section generated from the design block and the scenes,
+per-scene title and transition overrides included, then quotes the source video's `design.md` under "Notes
+from the source video". Those notes are that video's own prose and bind no other episode. Read the file and
+tighten the Continuity section into real rules.
 
 ## 3. Plan the script
 
@@ -160,8 +171,10 @@ Then read `series/<name>/design.md` and tighten its generated Continuity section
 
 Schema: `src/video/schema.ts`. After `pnpm series:use` the file already holds `id`, `series`, `design` and
 `voice`: edit it and keep those. Each scene has `id`, `narration`, and optional `kicker` (small label, e.g.
-"Step 2 · Upload the file"), `headline` (one line on screen), `minSeconds`, `title` and `transition`. Leave
-`kicker` and `headline` out when the title treatment is `none` or the scene speaks for itself. Copy `voice`
+"Step 2 · Upload the file"), `headline` (one line on screen), `minSeconds`, `title` and `transition`. The
+title treatment draws `kicker` and `headline`. Leave them out when the scene speaks for itself, or when its
+title treatment is `none` and the scene does not draw them itself (a look may show the kicker as a window-tab
+label, say). In a series, follow the Continuity section's kicker rule. Copy `voice`
 from the OpenClaw example unless the user asks for another voice or the series sets one. Put the user's
 original request in `brief`.
 
@@ -180,6 +193,15 @@ line, e.g. `eval "$(grep '^export ELEVENLABS_API_KEY=' ~/.bashrc)"`. Never write
 durations set each scene's length; never speed speech up to fit. Placeholder clips let you build and
 preview scenes first; `pnpm render <id> --preview` renders them, and a full render refuses until real
 narration exists. Changing the voice or its settings needs a fresh `pnpm voice`.
+
+**Reusing narration.** To give a video the narration of another one (a re-cut, a new look, an episode with
+the same lines), copy the other video's `audio/` folder and `voice.json` into `videos/<id>/`, then run
+`pnpm voice <id>`. The cache key is the text and the voice, so every scene whose narration and voice match
+finds its clip and its word timings. When all of them match, no key is needed. That run also rewrites `voice.json` for this
+video: a copied one still names the source in `"videoId"`, and the video does not load until it matches.
+
+**Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with
+`pnpm voice <id> --adopt <sceneId>=<file.mp3>`. The scene's narration must still say what the file says.
 
 **Word timings.** ElevenLabs clips carry character timings, so effects can land on an exact word. Adopted
 or placeholder clips have none (`voice.json` prints `timing: estimated`). Without them:
@@ -206,7 +228,7 @@ as composition `<id>-flat`.
 
 Build the scenes for this video's design, from the kit in `src/kit/`. The component gets
 `{ videoId, timeline, design }` (`VideoProps`). Wrap everything in `<Designed>`; inside it every kit part
-reads the tokens:
+reads the tokens. Without it the design block has no effect, and `pnpm render` warns:
 
 ```tsx
 export const MyVideo: React.FC<VideoProps> = ({ videoId, timeline, design }) => (
@@ -278,7 +300,7 @@ Hard rules (renders must be deterministic and frame-addressable):
 pnpm typecheck
 pnpm render <id> --stills-only                    # one still per scene + out/<id>/stills/contact.jpg
 pnpm render <id> --stills-only --frames 240,610   # specific frames
-pnpm compare <id>                                 # out/<id>/stills/compare.jpg
+pnpm compare <id>                                 # out/<id>/compare.jpg
 ```
 
 Open `contact.jpg` and look. Fix before rendering the video:
@@ -286,7 +308,11 @@ Open `contact.jpg` and look. Fix before rendering the video:
 - objects hidden behind labels, small text that would be unreadable on a phone
 - a scene whose picture does not match what the narration says at that moment
 
-Then open `compare.jpg`. Its top row is this storyboard. Below it:
+Then open `compare.jpg`. It sits outside `stills/`, so it survives later renders. Its top row is this
+storyboard. Each row below is labelled: a version's kept contact sheet, `storyboard (not rendered yet)`, or
+`frames from the MP4` for a video rendered before contact sheets were kept. The sheet holds frames of other
+videos, which may be private client work: it is a local working file. Never send it to anyone, attach it to
+a hand-off or commit it; send the user `contact.jpg` instead. Below the top row:
 - **A video with no series:** this video's previous look (if it was rendered before) and the three other
   videos rendered most recently. Write down in one or two sentences how this video differs from each. If it
   reads as the same look (same title treatment, same palette family and same layout), revise the design
@@ -312,7 +338,8 @@ sheet in `out/<id>/contacts/`.
 Then pull 6-9 frames from the MP4 itself at moments of motion and look at them:
 
 ```bash
-ffmpeg -v error -ss <seconds> -i out/<id>/<id>-v<N>.mp4 -frames:v 1 -vf scale=640:-1 /tmp/f.jpg
+mkdir -p out/<id>/frames
+ffmpeg -v error -ss <seconds> -i out/<id>/<id>-v<N>.mp4 -frames:v 1 -vf scale=640:-1 out/<id>/frames/v<N>-<seconds>s.jpg
 ```
 
 Only report the video as done after you have looked at frames from the rendered file.

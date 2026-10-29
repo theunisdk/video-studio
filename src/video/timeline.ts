@@ -29,6 +29,9 @@ export type Timeline = {
 // Narration audio sets every scene's length; storyboard hints never trim speech.
 export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline => {
   const { fps, timing } = video;
+  if (voice.videoId !== video.id) {
+    throw new Error(`voice.json was made for video "${voice.videoId}", not "${video.id}". Run: pnpm voice ${video.id}`);
+  }
   if (voice.voiceFingerprint !== voiceFingerprint(video.voice)) {
     throw new Error(`Voice settings changed since the clips were made. Run: pnpm voice ${video.id}`);
   }

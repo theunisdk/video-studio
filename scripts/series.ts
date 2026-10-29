@@ -6,6 +6,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { designFiles, designSchema, type Design } from "../src/video/design";
+import { videoSchema, type SceneSpec } from "../src/video/schema";
 
 const [command, a, b, ...extra] = process.argv.slice(2);
 const usage = "Usage: pnpm series:export <videoId> <name> | pnpm series:use <name> <videoId>";
@@ -39,32 +40,72 @@ const remapFiles = (d: Design, map: (p: string) => string): Design => {
   };
 };
 
-const continuity = (d: Design, meta: SeriesMeta, kickers: string[]) => `
-## Continuity
+const transitionText = (t: Design["transition"]) => (t.kind === "cut" ? "cut" : `${t.kind} ${t.direction} (${t.frames} frames)`);
+
+/** Where a scene sits, in words another episode can follow (its id is the source video's own). */
+const position = (i: number, count: number, id: string) =>
+  `${i === 0 ? "the opening scene" : i === count - 1 ? "the closing scene" : `scene ${i + 1} of ${count}`} (\`${id}\` in the source)`;
+
+const overrides = (scenes: SceneSpec[], pick: (s: SceneSpec) => string | undefined) =>
+  scenes.flatMap((s, i) => {
+    const value = pick(s);
+    return value ? [`${position(i, scenes.length, s.id)} uses ${value}`] : [];
+  });
+
+const continuity = (d: Design, meta: SeriesMeta, scenes: SceneSpec[]) => {
+  const titleOverrides = overrides(scenes, (s) => (s.title && s.title !== d.title ? s.title : undefined));
+  const transitionOverrides = overrides(scenes, (s) => (s.transition ? transitionText(s.transition) : undefined));
+  const kicked = scenes.filter((s) => s.kicker);
+  const drawnByScenes = kicked.some((s) => (s.title ?? d.title) === "none");
+  const kickers = kicked.length
+    ? `follow the pattern of ${kicked.slice(0, 3).map((s) => `"${s.kicker}"`).join(", ")}` +
+      (drawnByScenes ? ". Where the title treatment is none, the scenes draw them themselves, so keep writing them" : "")
+    : "none; leave `kicker` out";
+  return `## Continuity
+
+Generated from the design block and scenes of \`${meta.exportedFrom}\` on ${meta.exportedAt.slice(0, 10)}.
 
 Fixed in every episode:
 
 - Palette: ${Object.entries(d.palette).filter(([, v]) => typeof v === "string").map(([k, v]) => `${k} ${v}`).join(", ")}${d.palette.accents.length ? `; accents ${d.palette.accents.join(", ")}` : ""}
 - Fonts: display ${d.fonts.display.family}, body ${d.fonts.body.family}${d.fonts.mono ? `, mono ${d.fonts.mono.family}` : ""}
-- Title treatment: ${d.title}. Caption treatment: ${d.caption}.
-- Motion: ${d.motion}. Transition: ${d.transition.kind}${d.transition.kind === "cut" ? "" : ` (${d.transition.frames} frames)`}.
+- Title treatment: ${d.title}${titleOverrides.length ? `, except ${titleOverrides.join("; ")}` : ""}. Caption treatment: ${d.caption}.
+- Motion: ${d.motion}. Transition: ${transitionText(d.transition)}${transitionOverrides.length ? `, except ${transitionOverrides.join("; ")}` : ""}.
 - Background: ${d.background.kind}${d.background.grain ? ` with grain ${d.background.grain}` : ""}. Shape: radius ${d.shape.radius}, stroke ${d.shape.stroke}, shadow ${d.shape.shadow}.
 - Logo: ${d.logo ? `${d.logo.placement}, ${d.logo.height}px high` : "none"}.
 - Voice: the \`voice\` block in series.json.
-- Kickers: ${kickers.length ? `follow the pattern of ${kickers.slice(0, 3).map((k) => `"${k}"`).join(", ")}` : "none"}.
+- Kickers: ${kickers}.
 - Intro and outro: the components in components/, if any, open and close every episode.
 
 May vary per episode: the scene layouts, the subject's own screenshots and diagrams, accents chosen from the palette for
 the subject's parts, and the number of scenes.
+`;
+};
 
-Exported from \`${meta.exportedFrom}\` on ${meta.exportedAt.slice(0, 10)}.
+/** The source video's design.md, quoted, so its subject-specific prose never reads as a series rule. */
+const sourceNotes = (videoId: string, text: string) =>
+  `
+## Notes from the source video
+
+Quoted from \`videos/${videoId}/design.md\`, written for that video alone. It explains why the look was chosen; its
+subject, devices and scene notes are not rules for other episodes. The Continuity section above is the rule.
+
+${text
+  .trimEnd()
+  .split("\n")
+  .map((line) => (line ? `> ${line}` : ">"))
+  .join("\n")}
 `;
 
 const exportSeries = (videoId: string, name: string) => {
   const src = join("videos", videoId);
   const spec = readJson(join(src, "video.json"));
   if (!spec.design) throw new Error(`videos/${videoId}/video.json has no design block to export`);
-  const design = designSchema.parse(spec.design);
+  const { design, scenes } = videoSchema.parse(spec);
+  if (!design) throw new Error(`videos/${videoId}/video.json has no design block to export`);
+  if (spec.series && spec.series !== name) {
+    throw new Error(`videos/${videoId} is already an episode of series "${String(spec.series)}"; use that series (pnpm series:use ${String(spec.series)} <id>)`);
+  }
   const dest = join("series", name);
   if (existsSync(dest)) throw new Error(`${dest} already exists; pick another name, or delete it first if it should be replaced`);
 
@@ -87,17 +128,20 @@ const exportSeries = (videoId: string, name: string) => {
 
     writeJson(join(work, "design.json"), remapFiles(design, (p) => moved.get(p) ?? p));
     writeJson(join(work, "series.json"), meta);
-    const kickers = ((spec.scenes as { kicker?: string }[] | undefined) ?? []).map((s) => s.kicker).filter((k): k is string => !!k);
-    const direction = existsSync(join(src, "design.md")) ? readFileSync(join(src, "design.md"), "utf8").trimEnd() + "\n" : `# ${name}\n`;
-    writeFileSync(join(work, "design.md"), /^## Continuity/m.test(direction) ? direction : direction + continuity(design, meta, kickers));
+    const notes = existsSync(join(src, "design.md")) ? sourceNotes(videoId, readFileSync(join(src, "design.md"), "utf8")) : "";
+    writeFileSync(join(work, "design.md"), `# Series ${name}\n\n${continuity(design, meta, scenes)}${notes}`);
     renameSync(work, dest);
   } catch (e) {
     rmSync(work, { recursive: true, force: true });
     throw e;
   }
+  // The source is the series' first episode, so the next episode's pnpm compare finds it.
+  spec.series = name;
+  writeJson(join(src, "video.json"), spec);
 
   console.log(`series ${dest}`);
   console.log(`  design.json, series.json, design.md${components.length ? `, components/ (${components.join(", ")})` : ""}${moved.size ? `, assets/ (${[...moved.values()].map((p) => basename(p)).join(", ")})` : ""}`);
+  console.log(`  videos/${videoId}/video.json: series ${name} (it is the first episode)`);
   console.log(`Read ${join(dest, "design.md")} and tighten its Continuity section: say what must stay fixed and what may vary.`);
 };
 
