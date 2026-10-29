@@ -4,7 +4,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAvailableFonts } from "@remotion/google-fonts";
-import type { Page } from "playwright";
+import { request, type APIRequestContext, type Page } from "playwright";
 
 type ColorRole = "background" | "surface" | "text" | "muted" | "link" | "button" | "accent" | "border";
 type FontRole = "heading" | "body" | "mono" | "ui";
@@ -39,29 +39,38 @@ export function clearBrand(researchDir: string) {
   let names: string[] = [];
   try {
     names = readdirSync(dir);
-  } catch {
-    return;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw e;
   }
   for (const name of names) if (/^(logo|favicon|og-image)\.[a-z]+$/.test(name)) rmSync(join(dir, name), { force: true });
 }
 
 export async function captureBrand(page: Page, researchDir: string): Promise<Brand> {
-  // tsx keeps function names with an injected __name() helper, which the page does not have.
-  await page.evaluate("globalThis.__name ??= (f) => f");
-  const collected = await page.evaluate(collect);
+  const collected = await inPage(page, collect);
   const brandDir = join(researchDir, "brand");
   mkdirSync(brandDir, { recursive: true });
 
+  // Its own cookie jar, so these downloads cannot change how the later pages of the capture load.
+  const http = await request.newContext({ userAgent: await page.evaluate(() => navigator.userAgent) });
   const save = async (name: string, candidates: string[]): Promise<string | null> => {
     for (const url of candidates) {
       if (/^data:[^,]*,$/.test(url)) continue;
-      const body = await download(page, url).catch((e: Error) => {
-        console.log(`brand: could not download ${name} from ${url}: ${e.message.split("\n")[0]}`);
+      let body = await download(http, url).catch((e: Error) => {
+        console.error(`brand: could not download ${name} from ${url}: ${e.message.split("\n")[0]}`);
         return null;
       });
       const ext = body && sniff(body);
-      if (body && !ext) console.log(`brand: ${name} at ${url} is not an image`);
+      if (body && !ext) console.error(`brand: ${name} at ${url} is not an image`);
       if (!body || !ext) continue;
+      if (ext === "svg") {
+        const clean = await inPage(page, sanitiseSvg, body.toString("utf8")).catch(() => null);
+        if (!clean) {
+          console.error(`brand: ${name} at ${url} is not a valid SVG`);
+          continue;
+        }
+        body = Buffer.from(clean);
+      }
       writeFileSync(join(brandDir, `${name}.${ext}`), body);
       return `research/brand/${name}.${ext}`;
     }
@@ -69,12 +78,18 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
   };
 
   let logo: string | null = null;
-  if (collected.logo && "svg" in collected.logo) {
-    writeFileSync(join(brandDir, "logo.svg"), collected.logo.svg);
-    logo = "research/brand/logo.svg";
-  } else if (collected.logo) logo = await save("logo", [collected.logo.url]);
-  const favicon = await save("favicon", rankFavicons(collected.favicons, page.url()));
-  const ogImage = collected.ogImage ? await save("og-image", [collected.ogImage]) : null;
+  let favicon: string | null = null;
+  let ogImage: string | null = null;
+  try {
+    if (collected.logo && "svg" in collected.logo) {
+      writeFileSync(join(brandDir, "logo.svg"), await inPage(page, sanitiseSvg, collected.logo.svg));
+      logo = "research/brand/logo.svg";
+    } else if (collected.logo) logo = await save("logo", [collected.logo.url]);
+    favicon = await save("favicon", rankFavicons(collected.favicons, page.url()));
+    ogImage = collected.ogImage ? await save("og-image", [collected.ogImage]) : null;
+  } finally {
+    await http.dispose();
+  }
 
   const brand: Brand = {
     url: page.url(),
@@ -89,11 +104,29 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
   return brand;
 }
 
-async function download(page: Page, url: string): Promise<Buffer> {
+/** page.evaluate for a function from this module: tsx wraps named functions in a __name() helper the page lacks. */
+async function inPage<A, R>(page: Page, fn: (arg: A) => R, arg?: A): Promise<R> {
+  return (await page.evaluate(`(() => { const __name = (f) => f; return (${fn})(${JSON.stringify(arg) ?? ""}); })()`)) as R;
+}
+
+/** Runs in the page. A site's SVG is untrusted: drop scripts, event handlers and embedded HTML before it is saved. */
+function sanitiseSvg(text: string): string {
+  const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+  const svg = doc.documentElement;
+  if (svg.localName !== "svg" || doc.querySelector("parsererror")) throw new Error("not an SVG document");
+  for (const el of svg.querySelectorAll("script, foreignObject")) el.remove();
+  for (const el of [svg, ...svg.querySelectorAll("*")]) {
+    for (const a of [...el.attributes]) if (/^on/i.test(a.name) || (/href$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) el.removeAttribute(a.name);
+  }
+  return new XMLSerializer().serializeToString(svg);
+}
+
+async function download(http: APIRequestContext, url: string): Promise<Buffer> {
   const data = /^data:([^,]*?)(;base64)?,(.*)$/s.exec(url);
   if (data) return data[2] ? Buffer.from(data[3], "base64") : Buffer.from(decodeURIComponent(data[3]));
-  const response = await page.context().request.get(url, { timeout: 20_000 });
+  const response = await http.get(url, { timeout: 20_000 });
   if (!response.ok()) throw new Error(`HTTP ${response.status()}`);
+  if (Number(response.headers()["content-length"]) > MAX_FILE_BYTES) throw new Error("file is too large");
   const body = await response.body();
   if (body.length > MAX_FILE_BYTES) throw new Error(`${body.length} bytes is too large`);
   return body;
@@ -117,9 +150,11 @@ function sniff(b: Buffer): string | null {
 /** Best first: an SVG, then the largest declared size (an apple-touch-icon is 180 px unless it says otherwise). */
 function rankFavicons(favicons: Collected["favicons"], pageUrl: string): string[] {
   const size = (f: Collected["favicons"][number]) => {
+    // Safari's pinned-tab icon is a one-colour silhouette, not the site's icon.
+    if (/mask-icon/i.test(f.rel)) return -1;
     if (f.type === "image/svg+xml" || /\.svg(?:[?#]|$)/i.test(f.url) || /\bany\b/i.test(f.sizes ?? "")) return Infinity;
     const declared = Math.max(0, ...[...(f.sizes ?? "").matchAll(/(\d+)x\d+/gi)].map((m) => Number(m[1])));
-    return declared || (/apple-touch-icon/i.test(f.rel) ? 180 : /mask-icon/i.test(f.rel) ? -1 : 0);
+    return declared || (/apple-touch-icon/i.test(f.rel) ? 180 : 0);
   };
   const ranked = favicons.filter((f) => size(f) >= 0).sort((a, b) => size(b) - size(a));
   return [...new Set([...ranked.map((f) => f.url), new URL("/favicon.ico", pageUrl).href])];
@@ -200,11 +235,16 @@ function primaryFamily(stack: string): string {
   return families[0] ?? "";
 }
 
-/** The Google Fonts name for a family, also trying self-hosted spellings: "InterVariable", "Inter var", "GeistSans". */
+/** The Google Fonts name for a family, also trying self-hosted spellings: "InterVariable", "Inter var", "IBMPlexSans", "GeistSans". */
 function googleFamily(family: string): string | null {
   googleFamilies ??= new Map(getAvailableFonts().map((f) => [f.fontFamily.toLowerCase(), f.fontFamily]));
-  const plain = family.replace(/\s*(?:variable|var|vf)$/i, "").replace(/([a-z])([A-Z])/g, "$1 $2");
-  for (const name of [family, plain, plain.replace(/\s+sans$/i, "")]) {
+  const plain = family.replace(/\s*(?:variable|var|vf)$/i, "");
+  const names = [family, plain];
+  if (!/\s/.test(plain)) {
+    const spaced = plain.replace(/([a-z])([A-Z])|([A-Z])([A-Z][a-z])/g, "$1$3 $2$4");
+    names.push(spaced, spaced.replace(/\s+sans$/i, ""));
+  }
+  for (const name of names) {
     const hit = googleFamilies.get(name.trim().toLowerCase());
     if (hit) return hit;
   }
@@ -214,13 +254,15 @@ function googleFamily(family: string): string | null {
 const ROLE_ORDER: FontRole[] = ["body", "heading", "ui", "mono"];
 
 function summariseFonts(usages: FontUsage[]): Brand["fonts"] {
-  const groups = new Map<string, { family: string; role: FontRole; chars: number; source: string; best: number }>();
+  const groups = new Map<string, { family: string; googleFont: boolean; role: FontRole; chars: number; source: string; best: number }>();
   for (const u of usages) {
-    const family = primaryFamily(u.stack);
-    if (!family) continue;
+    const raw = primaryFamily(u.stack);
+    if (!raw) continue;
+    const google = googleFamily(raw);
+    const family = google ?? raw;
     const role: FontRole = family === "monospace" || /\bmono\b|\bcode\b|consol|courier|menlo|monaco/i.test(family) ? "mono" : u.role;
     const key = `${role}\n${family}`;
-    const g = groups.get(key) ?? { family, role, chars: 0, source: u.source, best: 0 };
+    const g = groups.get(key) ?? { family, googleFont: !!google, role, chars: 0, source: u.source, best: 0 };
     g.chars += u.chars;
     if (u.chars > g.best) [g.best, g.source] = [u.chars, u.source];
     groups.set(key, g);
@@ -231,10 +273,7 @@ function summariseFonts(usages: FontUsage[]): Brand["fonts"] {
     return inRole
       .filter((g) => g.chars >= roleChars * 0.15)
       .slice(0, 2)
-      .map((g) => {
-        const google = googleFamily(g.family);
-        return { family: google ?? g.family, role, source: g.source, googleFont: !!google };
-      });
+      .map((g) => ({ family: g.family, role, source: g.source, googleFont: g.googleFont }));
   });
 }
 
@@ -248,8 +287,9 @@ function collect(): Collected {
   const UI = `${BUTTON}, input, select, textarea, label, nav, [role="navigation"], [role="tab"], [role="menuitem"]`;
   const CONSENT = /onetrust|cookie|consent|gdpr|usercentrics|didomi/i;
   const COLOR_RE = /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)|#[0-9a-f]{3,8}\b/gi;
+  const stops = (image: string) => image.replace(/url\((?:"[^"]*"|'[^']*'|[^)]*)\)/g, "").match(COLOR_RE) ?? [];
 
-  const canvas = document.createElement("canvas");
+  const canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas") as HTMLCanvasElement;
   canvas.width = canvas.height = 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
   const cache = new Map<string, { hex: string; alpha: number } | null>();
@@ -317,9 +357,9 @@ function collect(): Collected {
   /** Each element paints its own area less what its nearest painted descendants cover; `owner` is the nearest painted ancestor. */
   const visit = (el: Element, owner: { r: Rect; sub: number }) => {
     if (/^(HEAD|SCRIPT|STYLE|NOSCRIPT|TEMPLATE|LINK|META)$/.test(el.tagName)) return;
-    // A cookie banner is the consent tool's styling, not the site's.
-    if (CONSENT.test(`${el.id} ${el.getAttribute("class") ?? ""}`)) return;
     const cs = getComputedStyle(el);
+    // A cookie banner is the consent tool's styling, not the site's. Consent tools also tag <body>, so only overlays count.
+    if (/^(fixed|sticky)$/.test(cs.position) && CONSENT.test(`${el.id} ${el.getAttribute("class") ?? ""}`)) return;
     const box = cs.display !== "contents";
     if (box && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
     const r = box ? clip(el.getBoundingClientRect()) : { x: 0, y: 0, w: 0, h: 0 };
@@ -334,7 +374,7 @@ function collect(): Collected {
     }
 
     const clipText = cs.backgroundClip === "text" || cs.getPropertyValue("-webkit-background-clip") === "text";
-    const gradient = cs.backgroundImage === "none" ? [] : (cs.backgroundImage.match(COLOR_RE) ?? []);
+    const gradient = stops(cs.backgroundImage);
     const paints = el !== canvasEl && area > 0 && !clipText && (opaque(cs.backgroundColor) || cs.backgroundImage !== "none");
     let me = owner;
     if (paints) {
@@ -392,7 +432,10 @@ function collect(): Collected {
     }
   };
   for (const child of doc.children) visit(child, page);
-  add(canvasBg, "background", Math.max(0, page.r.w * page.r.h - page.sub), canvasEl);
+  const canvasArea = Math.max(0, page.r.w * page.r.h - page.sub);
+  const canvasGradient = stops(getComputedStyle(canvasEl).backgroundImage);
+  if (canvasGradient.length) for (const c of canvasGradient) add(c, "background", canvasArea / canvasGradient.length, canvasEl);
+  else add(canvasBg, "background", canvasArea, canvasEl);
 
   // Logo: an SVG in the header, inline or linked, that looks like a logo; else an image that says "logo".
   const site = location.hostname.replace(/^www\./, "").split(".")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -407,7 +450,7 @@ function collect(): Collected {
   };
   const homeLink = (el: Element) => {
     const a = el.closest("a[href]") as HTMLAnchorElement | null;
-    if (!a) return false;
+    if (!a || !URL.canParse(a.href, location.href)) return false;
     const u = new URL(a.href, location.href);
     return u.hostname.replace(/^www\./, "") === location.hostname.replace(/^www\./, "") && u.pathname === "/";
   };
@@ -432,7 +475,7 @@ function collect(): Collected {
       const score = (says(el, /logo|brand/i) ? 3 : 0) + (homeLink(el) ? 2 : 0) + (r.width / r.height >= 1.8 && r.width >= 60 ? 1 : 0);
       return { el, score };
     })
-    .filter((c) => c.score > 0)
+    .filter((c) => c.score >= 2)
     .sort((a, b) => b.score - a.score || byPosition(a.el, b.el));
 
   const serialise = (svg: SVGSVGElement) => {
@@ -479,7 +522,7 @@ function collect(): Collected {
     .filter((l) => /(?:^|\s)(?:icon|apple-touch-icon(?:-precomposed)?|mask-icon)(?:\s|$)/i.test(l.rel))
     .map((l) => ({ url: l.href, rel: l.rel, sizes: l.getAttribute("sizes"), type: l.getAttribute("type") }));
   const og = document.querySelector<HTMLMetaElement>('meta[property="og:image"], meta[name="og:image"], meta[property="og:image:url"]')?.content;
-  const ogImage = og ? new URL(og, document.baseURI).href : null;
+  const ogImage = og && URL.canParse(og, document.baseURI) ? new URL(og, document.baseURI).href : null;
 
   return { colors, fonts, logo, favicons, ogImage };
 }
