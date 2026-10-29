@@ -62,7 +62,7 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
     for (const url of candidates) {
       if (/^data:[^,]*,$/.test(url)) continue;
       let body = await download(url, userAgent).catch((e: Error) => {
-        const cause = (e.cause as Error | undefined)?.message;
+        const cause = (e.cause as NodeJS.ErrnoException | undefined)?.message || (e.cause as NodeJS.ErrnoException | undefined)?.code;
         console.error(`brand: could not download ${name} from ${url}: ${e.message.split("\n")[0]}${cause ? ` (${cause})` : ""}`);
         return null;
       });
@@ -129,32 +129,58 @@ async function inPage<A, R>(page: Page, fn: (arg: A) => R, arg?: A): Promise<R> 
  */
 function sanitiseSvg(text: string): { svg: string; stripped: boolean } {
   const SVG_NS = "http://www.w3.org/2000/svg";
+  const INLINE_IMAGE = String.raw`data:image\/(?:png|jpe?g|gif|webp|svg\+xml)[;,]`;
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const svg = doc.documentElement;
   if (svg.namespaceURI !== SVG_NS || svg.localName !== "svg" || doc.getElementsByTagName("parsererror").length) throw new Error("not an SVG document");
   for (const el of [...svg.getElementsByTagName("*")]) {
     if (el.namespaceURI !== SVG_NS || /^(script|foreignObject|animate|set|animateMotion|animateTransform|discard)$/.test(el.localName)) el.remove();
   }
+  const walker = doc.createTreeWalker(svg, NodeFilter.SHOW_PROCESSING_INSTRUCTION);
+  const instructions: ProcessingInstruction[] = [];
+  while (walker.nextNode()) instructions.push(walker.currentNode as ProcessingInstruction);
+  for (const pi of instructions) pi.remove();
+
   let stripped = false;
-  const localUrls = (css: string) => {
-    const kept = css.replace(/@import[^;]*;?/gi, "").replace(/url\(\s*(["']?)(?!#|data:image\/)[^)]*\)/gi, "none");
-    if (kept !== css) stripped = true;
-    return kept;
+  // CSS that can only point inside this file: every url() is a #fragment or an inline image, and nothing (escapes,
+  // image-set, @-rules) that could spell a URL some other way.
+  const local = (css: string) => {
+    const urls = css.match(/url\(/gi)?.length ?? 0;
+    const safe = [...css.matchAll(new RegExp(String.raw`url\(\s*["']?(?:#|${INLINE_IMAGE})[^"')]*["']?\s*\)`, "gi"))].length;
+    return urls === safe && !/\\|image-set|@/i.test(css);
   };
+  const scratch = document.createElement("div");
   for (const el of [svg, ...svg.getElementsByTagName("*")]) {
-    if (el.localName === "style") el.textContent = localUrls(el.textContent ?? "");
+    if (el.localName === "style") {
+      // The CSSOM drops @import and decodes escapes, so what is checked is what a viewer would apply.
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(el.textContent ?? "");
+      const rules = [...sheet.cssRules].filter((r) => r instanceof CSSStyleRule && local(r.cssText));
+      if (rules.length !== sheet.cssRules.length || /@import/i.test(el.textContent ?? "")) stripped = true;
+      el.textContent = rules.map((r) => r.cssText).join("\n");
+    }
     for (const a of [...el.attributes]) {
-      const value = a.value.trim();
-      const inlineImage = /^(image|feImage)$/.test(el.localName) && /^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(value);
-      const external = /href$/i.test(a.name) && !value.startsWith("#") && !inlineImage;
-      if (external && /^(use|image|feImage)$/.test(el.localName)) stripped = true;
+      let value = a.value;
+      if (a.name === "style") {
+        scratch.style.cssText = value;
+        value = scratch.style.cssText;
+      }
+      const ref = /href$/i.test(a.name);
+      const inlineImage = /^(image|feImage)$/.test(el.localName) && new RegExp(`^${INLINE_IMAGE}`, "i").test(value.trim());
+      const external = ref ? !value.trim().startsWith("#") && !inlineImage : !local(value) && /url\(|image-set|\\/i.test(value);
+      if (external && (ref ? /^(use|image|feImage)$/.test(el.localName) : true)) stripped = true;
       if (/^on/i.test(a.name) || external || /^javascript:/i.test(a.value.replace(/[\x00-\x20]/g, ""))) el.removeAttribute(a.name);
-      else if (a.name === "style") el.setAttribute("style", localUrls(a.value));
+      else if (a.name === "style") el.setAttribute("style", value);
     }
   }
-  const drawable = [...svg.getElementsByTagName("*")].some(
-    (el) => /^(path|rect|circle|ellipse|polygon|polyline|line|text)$/.test(el.localName) || (/^(use|image)$/.test(el.localName) && (el.hasAttribute("href") || el.hasAttribute("xlink:href"))),
-  );
+  const hidden = "defs, clipPath, mask, symbol, pattern, marker";
+  const drawable = [...svg.getElementsByTagName("*")].some((el) => {
+    if (el.closest(hidden)) return false;
+    if (/^(path|rect|circle|ellipse|polygon|polyline|line|text)$/.test(el.localName)) return true;
+    const href = el.getAttribute("href") ?? el.getAttribute("xlink:href");
+    if (el.localName === "image") return !!href;
+    return el.localName === "use" && !!href && !!svg.querySelector(`[id="${CSS.escape(href.slice(1))}"]`);
+  });
   if (!drawable) throw new Error(stripped ? "it only draws files it links to" : "it draws nothing");
   return { svg: new XMLSerializer().serializeToString(svg), stripped };
 }
@@ -493,7 +519,7 @@ function collect(): Collected {
     }
     return false;
   };
-  const lang = doc.lang.split("-")[0].toLowerCase();
+  const lang = doc.lang.split(/[-_]/)[0].toLowerCase();
   const homeLink = (el: Element) => {
     const a = el.closest("a[href]") as HTMLAnchorElement | null;
     if (!a || !URL.canParse(a.href, location.href)) return false;
