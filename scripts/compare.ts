@@ -25,7 +25,8 @@ const sourceOf = (outId: string): string | null => {
   return dirs.sort((a, b) => b.length - a.length)[0] ?? null;
 };
 
-/** The series a video belongs to; a video.json that can't be read is an error, not "no series". */
+/** The series a video belongs to. An unreadable video.json fails for this video; another such video is skipped with a warning. */
+const unreadable = new Set<string>();
 const seriesOf = (outId: string): string | null => {
   const src = sourceOf(outId);
   if (!src) return null;
@@ -33,7 +34,10 @@ const seriesOf = (outId: string): string | null => {
   try {
     return (JSON.parse(readFileSync(file, "utf8")) as { series?: string }).series ?? null;
   } catch (e) {
-    throw new Error(`${file} can't be read: ${(e as Error).message}`);
+    if (outId === videoId) throw new Error(`${file} can't be read: ${(e as Error).message}`);
+    if (!unreadable.has(outId)) console.warn(`warning: skipping ${outId}, ${file} can't be read: ${(e as Error).message}`);
+    unreadable.add(outId);
+    return null;
   }
 };
 
@@ -84,7 +88,11 @@ const self = sourceOf(videoId) ?? videoId;
 // Other videos only: this video's own variants (out/<id>-flat) are not something to differ from.
 const others = readdirSync(outRoot, { withFileTypes: true })
   .filter((d) => d.isDirectory() && d.name !== videoId && !d.name.startsWith("kit-") && sourceOf(d.name) !== self)
-  .map((d) => d.name);
+  .map((d) => d.name)
+  .filter((o) => {
+    seriesOf(o);
+    return !unreadable.has(o);
+  });
 
 let refs: Sheet[] = [];
 let mode: "differ" | "continuity";

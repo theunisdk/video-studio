@@ -153,12 +153,16 @@ console.log("QA passed: streams, size, fps and duration match the timeline");
 
 // Keep what made this version, so any earlier look can be restored (pnpm restore) and rendered again.
 // The video is already in place, so a failure here is reported but does not fail the render.
+const snapshot = join(savedDir, name);
 try {
-  const snapshot = join(savedDir, name);
   copySources(resolve("videos", video.videoId), snapshot);
-  mkdirSync(join(outDir, "contacts"), { recursive: true });
-  copyFileSync(join(stillDir, "contact.jpg"), join(outDir, "contacts", `${name}.jpg`));
   console.log(`sources saved in ${snapshot}`);
 } catch (e) {
   console.error(`WARNING: ${name} rendered and passed QA, but its sources were not saved: ${(e as Error).message}`);
+}
+try {
+  mkdirSync(join(outDir, "contacts"), { recursive: true });
+  copyFileSync(join(stillDir, "contact.jpg"), join(outDir, "contacts", `${name}.jpg`));
+} catch (e) {
+  console.error(`WARNING: ${name} rendered and passed QA, but its contact sheet was not kept: ${(e as Error).message}`);
 }

@@ -135,10 +135,12 @@ const once = (key: string, load: () => Promise<void>): Promise<void> => {
   if (!fontLoads.has(key)) {
     fontLoads.set(
       key,
-      load().catch((e: Error) => {
-        fontLoads.delete(key);
-        throw e;
-      }),
+      Promise.resolve()
+        .then(load)
+        .catch((e: Error) => {
+          fontLoads.delete(key);
+          throw e;
+        }),
     );
   }
   return fontLoads.get(key)!;
@@ -157,9 +159,15 @@ const loadGoogle = (family: string, weights: number[]): Promise<void> => {
       document.head.appendChild(link);
     }).then(async () => {
       // Every subset, not just the one a test string would pick, so no glyph falls back mid-render.
+      // CJK families come in ~100 slices per weight; those load the Latin faces only, to stay inside delayRender's timeout.
       const faces = [...document.fonts].filter((f) => f.family.replace(/["']/g, "") === family);
       if (faces.length === 0) throw new Error(`Font "${family}" loaded no faces`);
-      await Promise.all(faces.map((f) => f.load()));
+      if (faces.length > 40 * ws.length) {
+        console.warn(`Font "${family}" has ${faces.length} faces; loading Latin only, other scripts load as they appear`);
+        await Promise.all(ws.map((w) => document.fonts.load(`${w} 40px "${family}"`, "Aa")));
+      } else {
+        await Promise.all(faces.map((f) => f.load()));
+      }
     }),
   );
 };
