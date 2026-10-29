@@ -34,7 +34,7 @@ Every video gets:
 
 ## Examples
 
-| Video | Style | Sources | Render |
+| Video | Look | Sources | Render |
 |---|---|---|---|
 | Getting started with Video Studio (80 s) | flat 2D with real screenshots | [`videos/getting-started/`](videos/getting-started/) | [`getting-started-v2.mp4`](out/getting-started/getting-started-v2.mp4) |
 | How OpenClaw works (62 s) | neon 3D explainer | [`videos/openclaw/`](videos/openclaw/) | [`openclaw-v2.mp4`](out/openclaw/openclaw-v2.mp4) |
@@ -56,7 +56,11 @@ Telegram/Whatsapp is the way to communicate with it.
 your request
    │
    ▼
-research ── website pages, docs, an app, files you attach      videos/<id>/research, capture
+research ── website pages and brand, docs, an app, files       videos/<id>/research, capture
+   │
+   ▼
+design ──── a look for this video: palette, type, titles,       videos/<id>/design.md, video.json
+            captions, motion, transitions (or a saved series)
    │
    ▼
 script ──── scenes with narration, headlines, sources noted     videos/<id>/video.json, NOTES.md
@@ -68,7 +72,7 @@ voice ───── one ElevenLabs clip per scene, with word timings    videos
 scenes ──── React + Three.js in Remotion, synced to the words   videos/<id>/Video.tsx
    │
    ▼
-storyboard ─ a still per scene to review before rendering        out/<id>/stills/contact.jpg
+storyboard ─ a still per scene, compared with recent videos      out/<id>/stills/contact.jpg, compare.jpg
    │
    ▼
 render + QA ─ MP4, captions, script; never overwrites           out/<id>/<id>-v<N>.mp4
@@ -113,27 +117,56 @@ claude
 ```
 
 Claude will tell you what it assumed, show you the storyboard if you ask to approve the look first, and
-give you the path of the finished MP4.
+give you the path of the finished MP4 with the look it chose and two alternatives.
 
 ## Your videos stay private
 
-Videos often contain client material, so everything under `videos/` and `out/` is git-ignored except the
-two examples (`openclaw` and `getting-started`). You can make videos in a clone of this public repo and nothing about them is ever
+Videos often contain client material, so everything under `videos/`, `out/` and `series/` is git-ignored
+except the two examples (`openclaw` and `getting-started`) and the demo series (`series/demo/`). You can make videos in a clone of this public repo and nothing about them is ever
 committed. Back those folders up yourself if you need to keep them.
 
 When a video shows a real app, check the screenshots for personal data (names, phone numbers, email
 addresses) before you share it. Use demo data, or blur it.
 
-## Styles
+## Every video gets its own look
 
-| Style | Good for |
-|---|---|
-| Neon 3D, dark | software, systems and abstract ideas (the OpenClaw example) |
-| Flat 2D, light | message flows, people and roles, phones and chats |
-| Illustrated 3D, light | people in real places: homes, clinics, offices |
-| Screenshot walkthrough | step-by-step use of a real app or website |
+Claude designs each video from its subject, audience, purpose, tone and brand. For a website it reads the
+site's colours, fonts and logo from the capture. It writes the direction down in `videos/<id>/design.md`
+and the tokens in a `design` block in `video.json`, then builds the scenes from them: palette, fonts
+(Google Fonts or your own font files), shapes, background, title and caption treatments, motion and
+transitions.
 
-Claude picks one to suit the subject. You can also name one: *"…in the flat 2D style"*.
+It starts from a [library of looks](.claude/skills/make-video/looks/README.md), such as editorial,
+blueprint, terminal, poster, Swiss, sketch, cinematic 3D, the neon 3D of the OpenClaw example and the flat
+2D of the getting-started tour, and adapts, mixes or departs from them. Before rendering, `pnpm compare`
+puts the storyboard next to the last few videos so a new video doesn't come out looking like the previous one.
+
+Claude doesn't ask you to choose. When it hands the video back it names the look it used and two others
+that would fit. Say *"make it blueprint instead"* and you get a new version in that look. The earlier
+version stays, and so do the sources that made it.
+
+To see every title, caption, transition, motion and background variant the kit can draw, run
+`pnpm gallery` (stills in `out/kit-gallery/`), or open `kit-gallery` in `pnpm studio`.
+
+## Series: one look for a set of videos
+
+For a run of training videos, save a look as a series and reuse it:
+
+> *"Save this look as the onboarding series."*
+> *"Make the next video in the onboarding series, on resetting a password."*
+
+A series is a folder, `series/<name>/`, holding the tokens (`design.json`), the direction with its
+continuity rules (`design.md`), the voice (`series.json`), any series parts such as an intro card
+(`components/`) and the brand files (`assets/`). Each new episode copies the series into its own video
+folder, so it keeps rendering the same way even if the series changes later. Series carry brands, so
+`series/` is git-ignored like `videos/`. You can copy a series folder to another machine.
+
+`series/demo/` is the one public example: a made-up training school, Lanternfield Academy. Try it:
+
+```bash
+claude
+> Make a short training video in the demo series on how to ask Video Studio for a video.
+```
 
 ## Commands
 
@@ -145,7 +178,12 @@ pnpm voice <id>                            # make narration clips (cached: only 
 pnpm voice <id> --placeholder              # silent clips, to build scenes before narration exists
 pnpm render <id> --stills-only             # storyboard stills + out/<id>/stills/contact.jpg
 pnpm render <id> --preview                 # render with placeholder narration
-pnpm render <id>                           # out/<id>/<id>-v<N>.mp4 + .srt + .md
+pnpm render <id>                           # out/<id>/<id>-v<N>.mp4 + .srt + .md, sources kept in videos/<id>/versions/
+pnpm compare <id>                          # storyboard beside recent videos: out/<id>/stills/compare.jpg
+pnpm series:export <id> <name>             # save a video's look as series/<name>/
+pnpm series:use <name> <id>                # start a video in a series (copies its look into videos/<id>/)
+pnpm restore <id> v2                       # put an earlier version's sources back, to render that look again
+pnpm gallery                               # stills of every kit treatment: out/kit-gallery/
 pnpm studio                                # live preview in the browser (Remotion Studio)
 pnpm typecheck
 ```
@@ -156,18 +194,23 @@ Every render is a new version (`-v1`, `-v2`, …), so earlier renders are never 
 
 ```text
 .claude/skills/make-video/   the instructions Claude follows
+.claude/skills/make-video/looks/  the looks library Claude designs from
 videos/<id>/                 one folder per video (git-ignored except the two examples)
-  video.json                   script: scenes, narration, headlines, voice
+  video.json                   script: scenes, narration, headlines, voice, design tokens
+  design.md                    the look and why it fits
   voice.json                   generated: clip durations and word timings
   Video.tsx                    the scenes
   index.ts                     registers the video
   audio/                       narration clips
   research/, capture/          website and app screenshots
   NOTES.md                     sources and assumptions
+  versions/                    the sources behind each render
+series/<name>/               saved looks shared by several videos (git-ignored except series/demo/)
 out/<id>/                    renders (git-ignored except the two examples)
-src/kit/                     reusable scene pieces: 3D objects, people, phones, captions, walkthroughs
+src/kit/                     reusable scene pieces: design tokens, titles, captions, transitions, motion,
+                             3D objects, people, phones, walkthroughs
 src/video/                   video.json schema, audio-driven timeline, captions
-scripts/                     voice, render, and the read-only capture browser
+scripts/                     voice, render, compare, series, and the read-only capture browser
 ```
 
 ## Licence

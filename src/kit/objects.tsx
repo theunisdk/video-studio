@@ -15,6 +15,7 @@ import {
   Vector3,
 } from "three";
 import type { Vec3 } from "./camera";
+import { useKit } from "./tokens";
 
 let glowTexture: CanvasTexture | null = null;
 const getGlowTexture = () => {
@@ -44,8 +45,9 @@ export const Glow: React.FC<{ color: string; size: number; opacity?: number; pos
   </sprite>
 );
 
-export const Starfield: React.FC<{ count?: number; seed?: string; opacity?: number }> = ({ count = 1400, seed = "stars", opacity = 0.7 }) => {
+export const Starfield: React.FC<{ count?: number; seed?: string; opacity?: number; color?: string }> = ({ count = 1400, seed = "stars", opacity = 0.7, color }) => {
   const frame = useCurrentFrame();
+  const { star } = useKit();
   const geometry = useMemo(() => {
     const pos = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
@@ -60,7 +62,7 @@ export const Starfield: React.FC<{ count?: number; seed?: string; opacity?: numb
   }, [count, seed]);
   return (
     <points geometry={geometry} rotation={[0, frame * 0.0006, 0]}>
-      <pointsMaterial color="#9fb0d8" size={0.12} sizeAttenuation transparent opacity={opacity} depthWrite={false} />
+      <pointsMaterial color={color ?? star} size={0.12} sizeAttenuation transparent opacity={opacity} depthWrite={false} />
     </points>
   );
 };
@@ -162,6 +164,7 @@ export const Orb: React.FC<{ color: string; form: number; activity?: number; pos
   radius = 1.15,
 }) => {
   const frame = useCurrentFrame();
+  const { highlight } = useKit();
   const count = 2600;
   const { from, to } = useMemo(() => {
     const f = new Float32Array(count * 3);
@@ -196,7 +199,7 @@ export const Orb: React.FC<{ color: string; form: number; activity?: number; pos
       </points>
       <mesh scale={form}>
         <sphereGeometry args={[0.24, 24, 24]} />
-        <meshBasicMaterial color={new Color(color).lerp(new Color("#ffffff"), 0.6)} />
+        <meshBasicMaterial color={new Color(color).lerp(new Color(highlight), 0.6)} />
       </mesh>
       <Glow color={color} size={2.6 + activity * 1.2} opacity={0.7 * form} />
       <mesh rotation={[1.35, 0, frame * 0.01]} scale={form}>
@@ -224,6 +227,7 @@ export const Connector: React.FC<{
   flow?: boolean;
 }> = ({ from, to, color, progress, lift = 0.9, packets = [], flow = true }) => {
   const frame = useCurrentFrame();
+  const { highlight } = useKit();
   const curve = useMemo(() => {
     const a = new Vector3(...from);
     const b = new Vector3(...to);
@@ -257,7 +261,7 @@ export const Connector: React.FC<{
             <group key={i} position={pos}>
               <mesh>
                 <sphereGeometry args={[0.11, 16, 16]} />
-                <meshBasicMaterial color={new Color(p.color).lerp(new Color("#ffffff"), 0.5)} />
+                <meshBasicMaterial color={new Color(p.color).lerp(new Color(highlight), 0.5)} />
               </mesh>
               <Glow color={p.color} size={1.1} opacity={0.9} />
             </group>
@@ -283,6 +287,7 @@ export const Trail: React.FC<{
   milestones?: { t: number; lit: number; color?: string }[];
   dimFrom?: number;
 }> = ({ points, color, progress, milestones = [], dimFrom = 1 }) => {
+  const { highlight } = useKit();
   const curve = useMemo(() => new CatmullRomCurve3(points.map((p) => new Vector3(...p))), [points]);
   const tube = useMemo(() => new TubeGeometry(curve, 240, 0.035, 8, false), [curve]);
   const faint = useMemo(() => new TubeGeometry(curve, 240, 0.012, 6, false), [curve]);
@@ -309,7 +314,7 @@ export const Trail: React.FC<{
             </mesh>
             <mesh scale={0.4 + 0.6 * m.lit}>
               <sphereGeometry args={[0.1, 16, 16]} />
-              <meshBasicMaterial color={new Color(c).lerp(new Color("#ffffff"), 0.4 * m.lit)} transparent opacity={0.4 + 0.6 * m.lit} />
+              <meshBasicMaterial color={new Color(c).lerp(new Color(highlight), 0.4 * m.lit)} transparent opacity={0.4 + 0.6 * m.lit} />
             </mesh>
             <Glow color={c} size={0.6 + 1.2 * m.lit} opacity={0.6 * m.lit} />
           </group>

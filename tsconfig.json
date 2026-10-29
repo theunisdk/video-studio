@@ -11,5 +11,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "scripts", "videos", "remotion.config.ts"]
+  "include": ["src", "scripts", "videos", "series", "remotion.config.ts"],
+  "exclude": ["node_modules", "videos/*/versions"]
 }

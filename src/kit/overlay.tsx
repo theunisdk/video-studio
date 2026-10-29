@@ -5,6 +5,9 @@ import { pop, ramp, visibleBetween } from "./anim";
 import type { Vec3 } from "./camera";
 import { useProject, useProjectIfStaged } from "./Stage";
 import { useTheme } from "./theme";
+import type { CaptionTreatment } from "../video/design";
+import { useDesign } from "./design";
+import { DesignedCaptions } from "./subtitles";
 
 /** One audio track per scene, placed where the timeline says narration starts. */
 export const NarrationAudio: React.FC<{ videoId: string; timeline: Timeline }> = ({ videoId, timeline }) => (
@@ -43,10 +46,15 @@ export const Headline: React.FC<{ scene: TimedScene; badge: string; color: strin
   );
 };
 
-/** Burned-in subtitles from the same cues that build captions.srt. */
-export const Captions: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
+/**
+ * Burned-in subtitles from the same cues that build captions.srt.
+ * Inside a <Designed> (or with `treatment`) they take the design's caption treatment; otherwise the original pill.
+ */
+export const Captions: React.FC<{ timeline: Timeline; treatment?: CaptionTreatment }> = ({ timeline, treatment }) => {
   const frame = useCurrentFrame();
   const t = useTheme();
+  const d = useDesign();
+  if (treatment || d) return <DesignedCaptions timeline={timeline} treatment={treatment ?? d!.caption} d={d} t={t} />;
   const cue = buildCues(timeline).find((c) => frame >= c.startFrame && frame < c.endFrame);
   if (!cue) return null;
   const o = Math.min(ramp(frame, cue.startFrame, 4), 1 - ramp(frame, cue.endFrame - 4, 4));

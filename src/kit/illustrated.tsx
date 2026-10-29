@@ -6,6 +6,7 @@ import { BufferAttribute, BufferGeometry, CatmullRomCurve3, Color, DoubleSide, V
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { lerp } from "./anim";
 import type { Vec3 } from "./camera";
+import { useKit } from "./tokens";
 
 const roundedCache = new Map<string, RoundedBoxGeometry>();
 const rounded = (w: number, h: number, d: number, r: number) => {
@@ -126,16 +127,19 @@ export type Look = {
   bandage?: "left" | "right";
 };
 
-const Leg: React.FC<{ x: number; hip: number; knee: number; look: Look; bandage: boolean }> = ({ x, hip, knee, look, bandage }) => (
-  <group position={[x, 0, 0]} rotation={[hip, 0, 0]}>
-    <Capsule r={0.085} len={0.28} position={[0, -0.2, 0]} color={look.bottom} />
-    <group position={[0, -0.42, 0]} rotation={[knee, 0, 0]}>
-      <Capsule r={0.072} len={0.26} position={[0, -0.19, 0]} color={look.bottom} />
-      {bandage && <Cyl rTop={0.088} h={0.16} position={[0, -0.2, 0]} color="#fbfbf8" />}
-      <RBox size={[0.12, 0.08, 0.24]} radius={0.035} position={[0, -0.4, 0.05]} color={look.shoes} />
+const Leg: React.FC<{ x: number; hip: number; knee: number; look: Look; bandage: boolean }> = ({ x, hip, knee, look, bandage }) => {
+  const f = useKit().furniture;
+  return (
+    <group position={[x, 0, 0]} rotation={[hip, 0, 0]}>
+      <Capsule r={0.085} len={0.28} position={[0, -0.2, 0]} color={look.bottom} />
+      <group position={[0, -0.42, 0]} rotation={[knee, 0, 0]}>
+        <Capsule r={0.072} len={0.26} position={[0, -0.19, 0]} color={look.bottom} />
+        {bandage && <Cyl rTop={0.088} h={0.16} position={[0, -0.2, 0]} color={f.bandage} />}
+        <RBox size={[0.12, 0.08, 0.24]} radius={0.035} position={[0, -0.4, 0.05]} color={look.shoes} />
+      </group>
     </group>
-  </group>
-);
+  );
+};
 
 const Arm: React.FC<{ side: 1 | -1; sx: number; sz: number; elbow: number; look: Look; phone: boolean; phoneGlow: number }> = ({
   side,
@@ -145,24 +149,27 @@ const Arm: React.FC<{ side: 1 | -1; sx: number; sz: number; elbow: number; look:
   look,
   phone,
   phoneGlow,
-}) => (
-  <group position={[0.235 * side, 0.63, 0]} rotation={[sx, 0, sz]}>
-    <Capsule r={0.058} len={0.2} position={[0, -0.14, 0]} color={look.top} />
-    <group position={[0, -0.29, 0]} rotation={[elbow, 0, 0]}>
-      <Capsule r={0.05} len={0.18} position={[0, -0.13, 0]} color={look.sleeves === "long" ? look.top : look.skin} />
-      <Sphere r={0.058} position={[0, -0.27, 0]} color={look.skin} />
-      {phone && (
-        <group position={[0, -0.3, 0.05]} rotation={[-0.2, 0, 0]}>
-          <RBox size={[0.09, 0.17, 0.016]} radius={0.007} color="#1f2a30" />
-          <mesh position={[0, 0, 0.0095]}>
-            <planeGeometry args={[0.078, 0.15]} />
-            <meshStandardMaterial color="#cfeee3" emissive="#8fe0c6" emissiveIntensity={0.35 + phoneGlow} />
-          </mesh>
-        </group>
-      )}
+}) => {
+  const f = useKit().furniture;
+  return (
+    <group position={[0.235 * side, 0.63, 0]} rotation={[sx, 0, sz]}>
+      <Capsule r={0.058} len={0.2} position={[0, -0.14, 0]} color={look.top} />
+      <group position={[0, -0.29, 0]} rotation={[elbow, 0, 0]}>
+        <Capsule r={0.05} len={0.18} position={[0, -0.13, 0]} color={look.sleeves === "long" ? look.top : look.skin} />
+        <Sphere r={0.058} position={[0, -0.27, 0]} color={look.skin} />
+        {phone && (
+          <group position={[0, -0.3, 0.05]} rotation={[-0.2, 0, 0]}>
+            <RBox size={[0.09, 0.17, 0.016]} radius={0.007} color={f.phoneBody} />
+            <mesh position={[0, 0, 0.0095]}>
+              <planeGeometry args={[0.078, 0.15]} />
+              <meshStandardMaterial color={f.phoneScreen} emissive={f.phoneGlow} emissiveIntensity={0.35 + phoneGlow} />
+            </mesh>
+          </group>
+        )}
+      </group>
     </group>
-  </group>
-);
+  );
+};
 
 /** A friendly, faceless-ish clay figure. Origin is the hip centre; place it at STAND_HIP or seat height. */
 export const Person: React.FC<{
@@ -177,6 +184,7 @@ export const Person: React.FC<{
   scale?: number;
 }> = ({ look, pose, position, rotationY = 0, phone = false, phoneGlow = 0, seed = 0, scale = 1 }) => {
   const frame = useCurrentFrame();
+  const f = useKit().furniture;
   const breathe = 1 + 0.012 * Math.sin(frame * 0.09 + seed);
   return (
     <group position={position} rotation={[0, rotationY, 0]} scale={scale}>
@@ -191,9 +199,9 @@ export const Person: React.FC<{
           <group position={[0, 0.66, 0.02]} rotation={[1.25, 0, 0]}>
             <mesh castShadow>
               <torusGeometry args={[0.12, 0.012, 8, 32, Math.PI * 1.3]} />
-              <Mat color="#3b4a52" />
+              <Mat color={f.metalDark} />
             </mesh>
-            <Sphere r={0.03} position={[0.08, -0.08, 0.06]} color="#9aa7ad" />
+            <Sphere r={0.03} position={[0.08, -0.08, 0.06]} color={f.metal} />
           </group>
         )}
         <Arm side={-1} sx={pose.shoulderLX} sz={pose.shoulderLZ} elbow={pose.elbowL} look={look} phone={false} phoneGlow={0} />
@@ -201,8 +209,8 @@ export const Person: React.FC<{
         <Cyl rTop={0.055} h={0.12} position={[0, 0.74, 0]} color={look.skin} />
         <group position={[0, 0.9, 0]} rotation={[pose.headX, pose.headY, 0]}>
           <Sphere r={0.15} color={look.skin} />
-          <Sphere r={0.017} position={[-0.052, 0.01, 0.135]} color="#2b2522" />
-          <Sphere r={0.017} position={[0.052, 0.01, 0.135]} color="#2b2522" />
+          <Sphere r={0.017} position={[-0.052, 0.01, 0.135]} color={f.eyes} />
+          <Sphere r={0.017} position={[0.052, 0.01, 0.135]} color={f.eyes} />
           <mesh rotation={[-0.45, 0, 0]} castShadow>
             <sphereGeometry args={[0.162, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.52]} />
             <Mat color={look.hair} />
@@ -228,58 +236,77 @@ export const Room: React.FC<{
   windowGlow?: number;
   position?: Vec3;
   children?: React.ReactNode;
-}> = ({ size: [w, d], wallHeight = 2.5, floor, wall, trim = "#ffffff", windowX = 0.6, windowGlow = 0, position, children }) => (
-  <group position={position}>
-    <RBox size={[w, 0.16, d]} radius={0.06} position={[0, -0.08, 0]} color={floor} />
-    <RBox size={[w, wallHeight, 0.14]} radius={0.05} position={[0, wallHeight / 2, -d / 2 + 0.07]} color={wall} />
-    <RBox size={[0.14, wallHeight, d]} radius={0.05} position={[-w / 2 + 0.07, wallHeight / 2, 0]} color={wall} />
-    <RBox size={[w, 0.12, 0.05]} radius={0.02} position={[0, 0.06, -d / 2 + 0.16]} color={trim} />
-    {/* window with frame */}
-    <group position={[windowX, wallHeight * 0.58, -d / 2 + 0.15]}>
-      <RBox size={[1.25, 0.95, 0.05]} radius={0.03} color={trim} />
-      <mesh position={[0, 0, 0.03]}>
-        <planeGeometry args={[1.1, 0.8]} />
-        <meshStandardMaterial color="#cfe6f2" emissive="#fff3d6" emissiveIntensity={0.25 + windowGlow} />
-      </mesh>
-      <RBox size={[0.04, 0.8, 0.03]} radius={0.01} position={[0, 0, 0.04]} color={trim} />
+}> = ({ size: [w, d], wallHeight = 2.5, floor, wall, trim, windowX = 0.6, windowGlow = 0, position, children }) => {
+  const f = useKit().furniture;
+  const t = trim ?? f.trim;
+  return (
+    <group position={position}>
+      <RBox size={[w, 0.16, d]} radius={0.06} position={[0, -0.08, 0]} color={floor} />
+      <RBox size={[w, wallHeight, 0.14]} radius={0.05} position={[0, wallHeight / 2, -d / 2 + 0.07]} color={wall} />
+      <RBox size={[0.14, wallHeight, d]} radius={0.05} position={[-w / 2 + 0.07, wallHeight / 2, 0]} color={wall} />
+      <RBox size={[w, 0.12, 0.05]} radius={0.02} position={[0, 0.06, -d / 2 + 0.16]} color={t} />
+      {/* window with frame */}
+      <group position={[windowX, wallHeight * 0.58, -d / 2 + 0.15]}>
+        <RBox size={[1.25, 0.95, 0.05]} radius={0.03} color={t} />
+        <mesh position={[0, 0, 0.03]}>
+          <planeGeometry args={[1.1, 0.8]} />
+          <meshStandardMaterial color={f.windowGlass} emissive={f.daylight} emissiveIntensity={0.25 + windowGlow} />
+        </mesh>
+        <RBox size={[0.04, 0.8, 0.03]} radius={0.01} position={[0, 0, 0.04]} color={t} />
+      </group>
+      {children}
     </group>
-    {children}
-  </group>
-);
+  );
+};
 
-export const ExamBed: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color = "#9fd8cf" }) => (
-  <group position={position} rotation={[0, rotationY, 0]}>
-    <RBox size={[1.8, 0.42, 0.7]} radius={0.08} position={[0, 0.21, 0]} color="#f4f5f2" />
-    <RBox size={[1.85, 0.13, 0.74]} radius={0.06} position={[0, 0.48, 0]} color={color} />
-    <RBox size={[0.45, 0.12, 0.6]} radius={0.06} position={[-0.68, 0.6, 0]} rotation={[0, 0, 0.12]} color="#ffffff" />
-    <mesh position={[0.15, 0.546, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[1.3, 0.5]} />
-      <meshStandardMaterial color="#ffffff" />
-    </mesh>
-  </group>
-);
+export const ExamBed: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.examBed;
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <RBox size={[1.8, 0.42, 0.7]} radius={0.08} position={[0, 0.21, 0]} color={f.linen} />
+      <RBox size={[1.85, 0.13, 0.74]} radius={0.06} position={[0, 0.48, 0]} color={c} />
+      <RBox size={[0.45, 0.12, 0.6]} radius={0.06} position={[-0.68, 0.6, 0]} rotation={[0, 0, 0.12]} color={f.white} />
+      <mesh position={[0.15, 0.546, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[1.3, 0.5]} />
+        <meshStandardMaterial color={f.white} />
+      </mesh>
+    </group>
+  );
+};
 
-export const Cabinet: React.FC<{ position?: Vec3; color?: string }> = ({ position, color = "#ffffff" }) => (
-  <group position={position}>
-    <RBox size={[0.9, 1.0, 0.45]} radius={0.05} position={[0, 0.5, 0]} color={color} />
-    {[0.3, 0.62].map((y) => (
-      <RBox key={y} size={[0.22, 0.04, 0.03]} radius={0.015} position={[0, y, 0.235]} color="#c9d2d6" />
-    ))}
-    <RBox size={[0.18, 0.22, 0.18]} radius={0.04} position={[-0.22, 1.11, 0]} color="#e9f3f6" />
-    <Cyl rTop={0.06} h={0.22} position={[0.2, 1.11, 0]} color="#7cc4b4" />
-  </group>
-);
+export const Cabinet: React.FC<{ position?: Vec3; color?: string }> = ({ position, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.cabinet;
+  return (
+    <group position={position}>
+      <RBox size={[0.9, 1.0, 0.45]} radius={0.05} position={[0, 0.5, 0]} color={c} />
+      {[0.3, 0.62].map((y) => (
+        <RBox key={y} size={[0.22, 0.04, 0.03]} radius={0.015} position={[0, y, 0.235]} color={f.handle} />
+      ))}
+      <RBox size={[0.18, 0.22, 0.18]} radius={0.04} position={[-0.22, 1.11, 0]} color={f.supplies} />
+      <Cyl rTop={0.06} h={0.22} position={[0.2, 1.11, 0]} color={f.supplyAccent} />
+    </group>
+  );
+};
 
 /** Green-cross clinic sign, flat against a wall. */
-export const CrossSign: React.FC<{ position?: Vec3; color?: string }> = ({ position, color = "#3fb68b" }) => (
-  <group position={position}>
-    <RBox size={[0.6, 0.6, 0.06]} radius={0.1} color="#ffffff" />
-    <RBox size={[0.14, 0.4, 0.04]} radius={0.02} position={[0, 0, 0.04]} color={color} />
-    <RBox size={[0.4, 0.14, 0.04]} radius={0.02} position={[0, 0, 0.04]} color={color} />
-  </group>
-);
+export const CrossSign: React.FC<{ position?: Vec3; color?: string }> = ({ position, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.sign;
+  return (
+    <group position={position}>
+      <RBox size={[0.6, 0.6, 0.06]} radius={0.1} color={f.white} />
+      <RBox size={[0.14, 0.4, 0.04]} radius={0.02} position={[0, 0, 0.04]} color={c} />
+      <RBox size={[0.4, 0.14, 0.04]} radius={0.02} position={[0, 0, 0.04]} color={c} />
+    </group>
+  );
+};
 
-export const Plant: React.FC<{ position?: Vec3; scale?: number; leaf?: string; pot?: string }> = ({ position, scale = 1, leaf = "#6fae7a", pot = "#d98b6c" }) => {
+export const Plant: React.FC<{ position?: Vec3; scale?: number; leaf?: string; pot?: string }> = ({ position, scale = 1, leaf: leafColor, pot: potColor }) => {
+  const f = useKit().furniture;
+  const leaf = leafColor ?? f.leaf;
+  const pot = potColor ?? f.pot;
   const frame = useCurrentFrame();
   const sway = Math.sin(frame * 0.04) * 0.03;
   return (
@@ -294,94 +321,127 @@ export const Plant: React.FC<{ position?: Vec3; scale?: number; leaf?: string; p
   );
 };
 
-export const Desk: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color = "#e8d5bd" }) => (
-  <group position={position} rotation={[0, rotationY, 0]}>
-    <RBox size={[1.3, 0.07, 0.65]} radius={0.03} position={[0, 0.74, 0]} color={color} />
-    {[-0.58, 0.58].map((x) => (
-      <RBox key={x} size={[0.06, 0.72, 0.56]} radius={0.02} position={[x, 0.36, 0]} color="#f4f1ec" />
-    ))}
-    <Cyl rTop={0.055} rBottom={0.05} h={0.12} position={[0.4, 0.84, 0.1]} color="#f2b866" />
-  </group>
-);
+export const Desk: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.wood;
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <RBox size={[1.3, 0.07, 0.65]} radius={0.03} position={[0, 0.74, 0]} color={c} />
+      {[-0.58, 0.58].map((x) => (
+        <RBox key={x} size={[0.06, 0.72, 0.56]} radius={0.02} position={[x, 0.36, 0]} color={f.deskLeg} />
+      ))}
+      <Cyl rTop={0.055} rBottom={0.05} h={0.12} position={[0.4, 0.84, 0.1]} color={f.mug} />
+    </group>
+  );
+};
 
-export const Chair: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color = "#7cc4b4" }) => (
-  <group position={position} rotation={[0, rotationY, 0]}>
-    <RBox size={[0.5, 0.08, 0.5]} radius={0.04} position={[0, 0.46, 0]} color={color} />
-    <RBox size={[0.5, 0.5, 0.07]} radius={0.04} position={[0, 0.72, -0.22]} color={color} />
-    <Cyl rTop={0.035} h={0.42} position={[0, 0.21, 0]} color="#9aa7ad" />
-    <Cyl rTop={0.22} h={0.03} position={[0, 0.015, 0]} color="#9aa7ad" />
-  </group>
-);
+export const Chair: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.chair;
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <RBox size={[0.5, 0.08, 0.5]} radius={0.04} position={[0, 0.46, 0]} color={c} />
+      <RBox size={[0.5, 0.5, 0.07]} radius={0.04} position={[0, 0.72, -0.22]} color={c} />
+      <Cyl rTop={0.035} h={0.42} position={[0, 0.21, 0]} color={f.metal} />
+      <Cyl rTop={0.22} h={0.03} position={[0, 0.015, 0]} color={f.metal} />
+    </group>
+  );
+};
 
-export const Sofa: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color = "#e0957a" }) => (
-  <group position={position} rotation={[0, rotationY, 0]}>
-    <RBox size={[2.1, 0.36, 0.9]} radius={0.1} position={[0, 0.24, 0]} color={color} />
-    <RBox size={[2.1, 0.62, 0.24]} radius={0.1} position={[0, 0.62, -0.34]} color={color} />
-    {[-1, 1].map((s) => (
-      <RBox key={s} size={[0.24, 0.52, 0.9]} radius={0.1} position={[s * 0.98, 0.42, 0]} color={color} />
-    ))}
-    {[-0.44, 0.44].map((x) => (
-      <RBox key={x} size={[0.86, 0.14, 0.7]} radius={0.07} position={[x, 0.48, 0.06]} color={new Color(color).offsetHSL(0, 0, 0.06).getStyle()} />
-    ))}
-    <RBox size={[0.4, 0.36, 0.14]} radius={0.07} position={[-0.6, 0.72, -0.16]} rotation={[0, 0.2, 0.1]} color="#f6e7d6" />
-    {[-0.9, 0.9].map((x) => (
-      <Cyl key={x} rTop={0.04} h={0.08} position={[x, 0.04, 0.32]} color="#8a6a4f" />
-    ))}
-  </group>
-);
+export const Sofa: React.FC<{ position?: Vec3; rotationY?: number; color?: string }> = ({ position, rotationY = 0, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.sofa;
+  return (
+    <group position={position} rotation={[0, rotationY, 0]}>
+      <RBox size={[2.1, 0.36, 0.9]} radius={0.1} position={[0, 0.24, 0]} color={c} />
+      <RBox size={[2.1, 0.62, 0.24]} radius={0.1} position={[0, 0.62, -0.34]} color={c} />
+      {[-1, 1].map((s) => (
+        <RBox key={s} size={[0.24, 0.52, 0.9]} radius={0.1} position={[s * 0.98, 0.42, 0]} color={c} />
+      ))}
+      {[-0.44, 0.44].map((x) => (
+        <RBox key={x} size={[0.86, 0.14, 0.7]} radius={0.07} position={[x, 0.48, 0.06]} color={new Color(c).offsetHSL(0, 0, 0.06).getStyle()} />
+      ))}
+      <RBox size={[0.4, 0.36, 0.14]} radius={0.07} position={[-0.6, 0.72, -0.16]} rotation={[0, 0.2, 0.1]} color={f.cushion} />
+      {[-0.9, 0.9].map((x) => (
+        <Cyl key={x} rTop={0.04} h={0.08} position={[x, 0.04, 0.32]} color={f.woodDark} />
+      ))}
+    </group>
+  );
+};
 
-export const Ottoman: React.FC<{ position?: Vec3; color?: string }> = ({ position, color = "#9fb4d8" }) => (
-  <group position={position}>
-    <Cyl rTop={0.32} h={0.36} position={[0, 0.18, 0]} color={color} />
-    <Cyl rTop={0.3} h={0.04} position={[0, 0.38, 0]} color={new Color(color).offsetHSL(0, 0, 0.06).getStyle()} />
-  </group>
-);
+export const Ottoman: React.FC<{ position?: Vec3; color?: string }> = ({ position, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.ottoman;
+  return (
+    <group position={position}>
+      <Cyl rTop={0.32} h={0.36} position={[0, 0.18, 0]} color={c} />
+      <Cyl rTop={0.3} h={0.04} position={[0, 0.38, 0]} color={new Color(c).offsetHSL(0, 0, 0.06).getStyle()} />
+    </group>
+  );
+};
 
-export const FloorLamp: React.FC<{ position?: Vec3; on?: number }> = ({ position, on = 1 }) => (
-  <group position={position}>
-    <Cyl rTop={0.18} h={0.04} position={[0, 0.02, 0]} color="#3b4a52" />
-    <Cyl rTop={0.022} h={1.5} position={[0, 0.77, 0]} color="#3b4a52" />
-    <mesh position={[0, 1.6, 0]} castShadow>
-      <cylinderGeometry args={[0.18, 0.3, 0.32, 32, 1, true]} />
-      <meshStandardMaterial color="#fff3dc" emissive="#ffd59a" emissiveIntensity={0.6 * on} side={DoubleSide} />
+export const FloorLamp: React.FC<{ position?: Vec3; on?: number }> = ({ position, on = 1 }) => {
+  const f = useKit().furniture;
+  return (
+    <group position={position}>
+      <Cyl rTop={0.18} h={0.04} position={[0, 0.02, 0]} color={f.metalDark} />
+      <Cyl rTop={0.022} h={1.5} position={[0, 0.77, 0]} color={f.metalDark} />
+      <mesh position={[0, 1.6, 0]} castShadow>
+        <cylinderGeometry args={[0.18, 0.3, 0.32, 32, 1, true]} />
+        <meshStandardMaterial color={f.lampShade} emissive={f.lampGlow} emissiveIntensity={0.6 * on} side={DoubleSide} />
+      </mesh>
+      <pointLight position={[0, 1.45, 0.1]} color={f.lampLight} intensity={2.5 * on} distance={4} decay={2} />
+    </group>
+  );
+};
+
+export const Rug: React.FC<{ position?: Vec3; size?: [number, number]; color?: string }> = ({ position, size = [2.4, 1.6], color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.rug;
+  return (
+    <mesh position={position} scale={[size[0] / 2, 1, size[1] / 2]} receiveShadow>
+      <cylinderGeometry args={[1, 1, 0.02, 48]} />
+      <Mat color={c} />
     </mesh>
-    <pointLight position={[0, 1.45, 0.1]} color="#ffcf8a" intensity={2.5 * on} distance={4} decay={2} />
-  </group>
-);
+  );
+};
 
-export const Rug: React.FC<{ position?: Vec3; size?: [number, number]; color?: string }> = ({ position, size = [2.4, 1.6], color = "#c9d9c3" }) => (
-  <mesh position={position} scale={[size[0] / 2, 1, size[1] / 2]} receiveShadow>
-    <cylinderGeometry args={[1, 1, 0.02, 48]} />
-    <Mat color={color} />
-  </mesh>
-);
+export const Frame: React.FC<{ position?: Vec3; size?: [number, number]; art?: string }> = ({ position, size = [0.6, 0.45], art }) => {
+  const f = useKit().furniture;
+  const a = art ?? f.art;
+  return (
+    <group position={position}>
+      <RBox size={[size[0], size[1], 0.04]} radius={0.02} color={f.white} />
+      <mesh position={[0, 0, 0.025]}>
+        <planeGeometry args={[size[0] * 0.78, size[1] * 0.72]} />
+        <meshStandardMaterial color={a} />
+      </mesh>
+    </group>
+  );
+};
 
-export const Frame: React.FC<{ position?: Vec3; size?: [number, number]; art?: string }> = ({ position, size = [0.6, 0.45], art = "#f2b866" }) => (
-  <group position={position}>
-    <RBox size={[size[0], size[1], 0.04]} radius={0.02} color="#ffffff" />
-    <mesh position={[0, 0, 0.025]}>
-      <planeGeometry args={[size[0] * 0.78, size[1] * 0.72]} />
-      <meshStandardMaterial color={art} />
-    </mesh>
-  </group>
-);
-
-export const SideTable: React.FC<{ position?: Vec3; color?: string }> = ({ position, color = "#e8d5bd" }) => (
-  <group position={position}>
-    <Cyl rTop={0.26} h={0.05} position={[0, 0.52, 0]} color={color} />
-    <Cyl rTop={0.03} h={0.5} position={[0, 0.25, 0]} color="#8a6a4f" />
-    <Cyl rTop={0.16} h={0.03} position={[0, 0.015, 0]} color="#8a6a4f" />
-  </group>
-);
+export const SideTable: React.FC<{ position?: Vec3; color?: string }> = ({ position, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.wood;
+  return (
+    <group position={position}>
+      <Cyl rTop={0.26} h={0.05} position={[0, 0.52, 0]} color={c} />
+      <Cyl rTop={0.03} h={0.5} position={[0, 0.25, 0]} color={f.woodDark} />
+      <Cyl rTop={0.16} h={0.03} position={[0, 0.015, 0]} color={f.woodDark} />
+    </group>
+  );
+};
 
 // ---------------------------------------------------------------- outdoors
 
-export const Tree: React.FC<{ position?: Vec3; scale?: number; leaf?: string; seed?: number }> = ({ position, scale = 1, leaf = "#8cc38e", seed = 0 }) => {
+export const Tree: React.FC<{ position?: Vec3; scale?: number; leaf?: string; seed?: number }> = ({ position, scale = 1, leaf: leafColor, seed = 0 }) => {
+  const f = useKit().furniture;
+  const leaf = leafColor ?? f.treeLeaf;
   const frame = useCurrentFrame();
   const sway = Math.sin(frame * 0.035 + seed) * 0.025;
   return (
     <group position={position} scale={scale} rotation={[0, 0, sway]}>
-      <Cyl rTop={0.08} rBottom={0.12} h={0.9} position={[0, 0.45, 0]} color="#a07a5c" />
+      <Cyl rTop={0.08} rBottom={0.12} h={0.9} position={[0, 0.45, 0]} color={f.trunk} />
       <Sphere r={0.62} position={[0, 1.35, 0]} color={leaf} />
       <Sphere r={0.45} position={[0.35, 1.7, 0.1]} color={new Color(leaf).offsetHSL(0, 0, 0.05).getStyle()} />
       <Sphere r={0.4} position={[-0.3, 1.75, -0.05]} color={new Color(leaf).offsetHSL(0, 0.02, -0.03).getStyle()} />
@@ -389,19 +449,27 @@ export const Tree: React.FC<{ position?: Vec3; scale?: number; leaf?: string; se
   );
 };
 
-export const Bush: React.FC<{ position?: Vec3; scale?: number; color?: string }> = ({ position, scale = 1, color = "#9acb94" }) => (
-  <group position={position} scale={scale}>
-    <Sphere r={0.32} position={[0, 0.22, 0]} scale={[1.3, 0.8, 1]} color={color} />
-    <Sphere r={0.24} position={[0.3, 0.2, 0.05]} scale={[1, 0.8, 1]} color={new Color(color).offsetHSL(0, 0, 0.04).getStyle()} />
-  </group>
-);
+export const Bush: React.FC<{ position?: Vec3; scale?: number; color?: string }> = ({ position, scale = 1, color }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.bush;
+  return (
+    <group position={position} scale={scale}>
+      <Sphere r={0.32} position={[0, 0.22, 0]} scale={[1.3, 0.8, 1]} color={c} />
+      <Sphere r={0.24} position={[0.3, 0.2, 0.05]} scale={[1, 0.8, 1]} color={new Color(c).offsetHSL(0, 0, 0.04).getStyle()} />
+    </group>
+  );
+};
 
-export const Ground: React.FC<{ color?: string; radius?: number }> = ({ color = "#dde8d3", radius = 40 }) => (
-  <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.17, 0]} receiveShadow>
-    <circleGeometry args={[radius, 64]} />
-    <Mat color={color} />
-  </mesh>
-);
+export const Ground: React.FC<{ color?: string; radius?: number }> = ({ color, radius = 40 }) => {
+  const f = useKit().furniture;
+  const c = color ?? f.ground;
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.17, 0]} receiveShadow>
+      <circleGeometry args={[radius, 64]} />
+      <Mat color={c} />
+    </mesh>
+  );
+};
 
 /** A flat ribbon on the ground following `points`; draws in with `progress`. */
 export const GroundPath: React.FC<{ points: Vec3[]; width?: number; color: string; progress?: number; y?: number; emissive?: number }> = ({
@@ -445,6 +513,7 @@ export const pathPoint = (points: Vec3[], t: number): Vec3 =>
 
 /** A map-pin style marker standing on the ground. */
 export const Pin: React.FC<{ position: Vec3; color: string; appear: number; lit?: number }> = ({ position, color, appear, lit = 1 }) => {
+  const f = useKit().furniture;
   if (appear <= 0.001) return null;
   return (
     <group position={position} scale={appear}>
@@ -453,31 +522,34 @@ export const Pin: React.FC<{ position: Vec3; color: string; appear: number; lit?
         <coneGeometry args={[0.1, 0.32, 24]} />
         <Mat color={color} />
       </mesh>
-      <Sphere r={0.06} position={[0, 0.55, 0.13]} color="#ffffff" />
+      <Sphere r={0.06} position={[0, 0.55, 0.13]} color={f.white} />
     </group>
   );
 };
 
 /** Soft daylight: sky/ground fill plus one warm key light with soft shadows. */
-export const DaylightRig: React.FC<{ center?: Vec3; warmth?: number }> = ({ center = [0, 0, 0], warmth = 0 }) => (
-  <>
-    <hemisphereLight args={["#ffffff", "#d8cbb6", 1.6]} />
-    <ambientLight intensity={0.25} />
-    <directionalLight
-      position={[center[0] + 6, 11, center[2] + 7]}
-      color={new Color("#fff6e8").lerp(new Color("#ffd9a8"), warmth).getStyle()}
-      intensity={2.4}
-      castShadow
-      shadow-mapSize={[2048, 2048]}
-      shadow-camera-left={-16}
-      shadow-camera-right={16}
-      shadow-camera-top={12}
-      shadow-camera-bottom={-12}
-      shadow-camera-near={1}
-      shadow-camera-far={40}
-      shadow-bias={-0.0004}
-      shadow-normalBias={0.02}
-      shadow-radius={6}
-    />
-  </>
-);
+export const DaylightRig: React.FC<{ center?: Vec3; warmth?: number }> = ({ center = [0, 0, 0], warmth = 0 }) => {
+  const f = useKit().furniture;
+  return (
+    <>
+      <hemisphereLight args={[f.sky, f.bounce, 1.6]} />
+      <ambientLight intensity={0.25} />
+      <directionalLight
+        position={[center[0] + 6, 11, center[2] + 7]}
+        color={new Color(f.sun).lerp(new Color(f.sunWarm), warmth).getStyle()}
+        intensity={2.4}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-left={-16}
+        shadow-camera-right={16}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+        shadow-camera-near={1}
+        shadow-camera-far={40}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.02}
+        shadow-radius={6}
+      />
+    </>
+  );
+};

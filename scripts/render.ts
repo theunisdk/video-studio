@@ -3,13 +3,15 @@
 // with N one past the highest existing version. --preview allows placeholder narration.
 // Bundles once, grabs a QA still from every scene (plus stills/contact.jpg), renders the MP4
 // with loudness-normalised audio, writes captions (.srt) and the narration script (.md),
-// then checks the MP4 with ffprobe.
+// then checks the MP4 with ffprobe. A passed render also keeps the sources that made it
+// (videos/<id>/versions/<name>/) and its contact sheet (out/<id>/contacts/<name>.jpg).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { buildCues, toSrt } from "../src/video/captions";
+import { checkDesign } from "./design-check";
 import { loadVideos } from "./videos";
 
 const args = process.argv.slice(2);
@@ -28,6 +30,10 @@ if (!video) {
   throw new Error(`Unknown video "${videoId}". Known: ${videos.map((v) => v.id).join(", ")}`);
 }
 
+const designCheck = await checkDesign(video);
+designCheck.notes.forEach((n) => console.log(`note: ${n}`));
+if (designCheck.errors.length) throw new Error(`design in videos/${video.videoId}/video.json:\n  ${designCheck.errors.join("\n  ")}`);
+
 const outDir = resolve("out", video.id);
 const stillDir = join(outDir, "stills");
 rmSync(stillDir, { recursive: true, force: true });
@@ -35,7 +41,7 @@ mkdirSync(stillDir, { recursive: true });
 
 const chromiumOptions = { gl: "swangle" as const };
 const serveUrl = await bundle({ entryPoint: resolve("src/index.ts"), publicDir: resolve("videos") });
-const inputProps = { videoId: video.videoId, timeline: video.timeline };
+const inputProps = { videoId: video.videoId, timeline: video.timeline, ...(video.design ? { design: video.design } : {}) };
 const composition = await selectComposition({ serveUrl, id: video.id, inputProps, chromiumOptions });
 
 const { timeline } = video;
@@ -136,7 +142,19 @@ cleanup();
 if (!preview) writeFileSync(join(outDir, `${name}.srt`), toSrt(buildCues(timeline), timeline.fps));
 if (!preview) writeFileSync(
   join(outDir, `${name}.md`),
-  `# ${video.title}\n\n` + timeline.scenes.map((s) => `## ${s.kicker}\n\n${s.narration}\n`).join("\n"),
+  `# ${video.title}\n\n` + timeline.scenes.map((s) => `## ${s.kicker || s.headline || s.id}\n\n${s.narration}\n`).join("\n"),
 );
+
+// Keep what made this version, so any earlier look can be restored (pnpm restore) and rendered again.
+const sourceDir = resolve("videos", video.videoId);
+const snapshot = join(sourceDir, "versions", name);
+mkdirSync(snapshot, { recursive: true });
+for (const f of ["Video.tsx", "index.ts", "index.tsx", "video.json", "voice.json", "design.md", "NOTES.md"]) {
+  if (existsSync(join(sourceDir, f))) copyFileSync(join(sourceDir, f), join(snapshot, f));
+}
+if (existsSync(join(sourceDir, "components"))) cpSync(join(sourceDir, "components"), join(snapshot, "components"), { recursive: true });
+mkdirSync(join(outDir, "contacts"), { recursive: true });
+copyFileSync(join(stillDir, "contact.jpg"), join(outDir, "contacts", `${name}.jpg`));
 console.log(`rendered ${output} in ${((Date.now() - started) / 1000).toFixed(0)}s: ${duration.toFixed(2)}s ${v?.codec_name} ${v?.width}x${v?.height} ${a?.codec_name}`);
 console.log("QA passed: streams, size, fps and duration match the timeline");
+console.log(`sources saved in ${snapshot}`);

@@ -8,6 +8,9 @@ CodeRabbit: none
 
 - One folder per video: `videos/<id>/` for sources, `out/<id>/` for renders. Both are git-ignored except
   the two public examples (`openclaw`, `getting-started`). Never commit another video or move its files into a tracked folder.
+- Saved looks live in `series/<name>/`, git-ignored except the tracked example `series/demo/`. Brand data
+  (`brand.json`, logos, font files, series) stays in `videos/` and `series/`; the kit, the skill, the looks
+  library and the docs never name a client, a brand or a private video.
 - Renders never overwrite: each one is a new `<id>-v<N>.mp4`.
 - Never write API keys or passwords into files. ElevenLabs reads `ELEVENLABS_API_KEY` from the environment.
 - `pnpm typecheck` before rendering.

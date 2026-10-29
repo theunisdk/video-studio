@@ -1,0 +1,11 @@
+{
+  "name": "demo",
+  "exportedFrom": "demo-episode",
+  "exportedAt": "2026-10-29T00:00:00.000Z",
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "21m00Tcm4TlvDq8ikWAM",
+    "modelId": "eleven_multilingual_v2",
+    "settings": { "stability": 0.5, "similarity_boost": 0.75, "style": 0.2 }
+  }
+}

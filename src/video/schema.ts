@@ -1,13 +1,18 @@
 import { z } from "zod";
+import { designSchema, titleTreatmentSchema, transitionSchema } from "./design";
 
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 
 export const sceneSchema = z.object({
   id,
-  kicker: z.string().max(60),
-  headline: z.string().trim().min(2).max(120),
+  kicker: z.string().max(60).optional(),
+  headline: z.string().trim().min(2).max(120).optional(),
   narration: z.string().trim().min(4).max(1500),
   minSeconds: z.number().min(0).max(120).default(0),
+  /** How this scene's title shows, overriding design.title. */
+  title: titleTreatmentSchema.optional(),
+  /** The transition into this scene, overriding design.transition. */
+  transition: transitionSchema.optional(),
 });
 
 export const videoSchema = z.object({
@@ -31,6 +36,10 @@ export const videoSchema = z.object({
     })
     .default({ leadInSeconds: 0.35, tailSeconds: 0.9, outroSeconds: 2 }),
   scenes: z.array(sceneSchema).min(1).max(40),
+  /** The look: tokens the kit reads through <Designed>. Videos without one keep the kit defaults. */
+  design: designSchema.optional(),
+  /** The series this video's look was copied from (series/<name>/), if any. */
+  series: id.optional(),
 });
 
 export type VideoSpec = z.infer<typeof videoSchema>;

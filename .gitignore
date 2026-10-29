@@ -16,6 +16,12 @@ out/openclaw/*
 out/getting-started/*
 !out/getting-started/getting-started-v2.*
 videos/openclaw/audio/placeholder-*
+# Every render saves its sources here; they are per-machine history, never committed.
+videos/*/versions/
+
+# Series looks carry client brands, so they stay local too. The demo series is the one public example.
+series/*
+!series/demo/
 
 # Local only
 notes/

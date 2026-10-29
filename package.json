@@ -8,6 +8,11 @@
     "voice": "tsx scripts/voice.ts",
     "render": "tsx scripts/render.ts",
     "capture-site": "tsx scripts/capture/site.ts",
+    "compare": "tsx scripts/compare.ts",
+    "series:export": "tsx scripts/series.ts export",
+    "series:use": "tsx scripts/series.ts use",
+    "restore": "tsx scripts/restore.ts",
+    "gallery": "tsx scripts/gallery.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
