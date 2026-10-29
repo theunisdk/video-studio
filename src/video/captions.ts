@@ -44,8 +44,10 @@ const timeAt = (offset: number, text: string, seconds: number, alignment: Alignm
   return (offset / text.length) * seconds;
 };
 
-export const buildCues = (timeline: Timeline): Cue[] => {
-  const cues: Cue[] = [];
+type Span = Cue & { scene: Timeline["scenes"][number]; start: number };
+
+const cueSpans = (timeline: Timeline): Span[] => {
+  const cues: Span[] = [];
   for (const scene of timeline.scenes) {
     const text = scene.narration;
     let searchFrom = 0;
@@ -59,6 +61,8 @@ export const buildCues = (timeline: Timeline): Cue[] => {
       const startSec = timeAt(start, text, scene.audioSeconds, scene.alignment);
       const endSec = i + 1 < chunks.length ? timeAt(nextStart, text, scene.audioSeconds, scene.alignment) : scene.audioSeconds;
       cues.push({
+        scene,
+        start,
         startFrame: scene.audioFrom + Math.round(startSec * timeline.fps),
         endFrame: scene.audioFrom + Math.round(endSec * timeline.fps),
         text: chunk,
@@ -67,6 +71,33 @@ export const buildCues = (timeline: Timeline): Cue[] => {
   }
   return cues;
 };
+
+export const buildCues = (timeline: Timeline): Cue[] =>
+  cueSpans(timeline).map(({ startFrame, endFrame, text }) => ({ startFrame, endFrame, text }));
+
+export type WordCue = Cue & {
+  /** Each word with the frame it starts being spoken; null frames when the scene has no word timings. */
+  words: { text: string; startFrame: number | null }[];
+  /** Whether the words carry real timings (alignment that matches the narration). */
+  timed: boolean;
+};
+
+/** The same cues as buildCues, split into words, for word-by-word caption effects. */
+export const buildWordCues = (timeline: Timeline): WordCue[] =>
+  cueSpans(timeline).map(({ scene, start, startFrame, endFrame, text }) => {
+    const a = scene.alignment;
+    const timed = !!a && a.characters.length === scene.narration.length;
+    let from = start;
+    const words = text.split(" ").map((w) => {
+      const at = scene.narration.indexOf(w, from);
+      from = at < 0 ? from : at + w.length;
+      return {
+        text: w,
+        startFrame: timed && at >= 0 ? scene.audioFrom + Math.round(a!.startSeconds[at] * timeline.fps) : null,
+      };
+    });
+    return { startFrame, endFrame, text, words, timed };
+  });
 
 const srtTime = (frame: number, fps: number) => {
   const ms = Math.round((frame / fps) * 1000);

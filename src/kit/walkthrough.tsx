@@ -3,6 +3,7 @@
 import { Img, staticFile, useCurrentFrame } from "remotion";
 import { lerp, ramp } from "./anim";
 import { useTheme } from "./theme";
+import { useKit, type BrowserColors } from "./tokens";
 
 export type Box = { x: number; y: number; width: number; height: number };
 
@@ -36,15 +37,16 @@ const cameraFor = (step: CaptureStep | undefined, zoom: number, vw: number, vh: 
   };
 };
 
-const Cursor: React.FC = () => (
+const Cursor: React.FC<{ c: BrowserColors }> = ({ c }) => (
   <svg width="34" height="40" viewBox="0 0 34 40" style={{ display: "block", filter: "drop-shadow(0 3px 6px rgba(0,0,0,.35))" }}>
-    <path d="M3 2 L3 31 L10.5 24.5 L15.5 36 L21 33.5 L16 22.5 L26 22 Z" fill="#ffffff" stroke="#1f2a30" strokeWidth="2.4" strokeLinejoin="round" />
+    <path d="M3 2 L3 31 L10.5 24.5 L15.5 36 L21 33.5 L16 22.5 L26 22 Z" fill={c.cursorFill} stroke={c.cursorStroke} strokeWidth="2.4" strokeLinejoin="round" />
   </svg>
 );
 
 /**
  * Plays `beats` over the captured screenshots inside a browser frame at (x, y) with the given width.
  * `shotsDir` is the staticFile folder holding the PNGs named in the manifest.
+ * `frame` picks the chrome: a light browser (default), a dark browser, or "none" for the bare screenshot.
  */
 export const Walkthrough: React.FC<{
   manifest: CaptureManifest;
@@ -56,11 +58,16 @@ export const Walkthrough: React.FC<{
   accent: string;
   title?: string;
   appear?: number;
-}> = ({ manifest, shotsDir, beats, x, y, width, accent, title = "", appear = 1 }) => {
+  frame?: "light" | "dark" | "none";
+  /** Corner radius of the frame; 18 by default. */
+  radius?: number;
+}> = ({ manifest, shotsDir, beats, x, y, width, accent, title = "", appear = 1, frame: chrome = "light", radius = 18 }) => {
   const frame = useCurrentFrame();
   const t = useTheme();
+  const kit = useKit();
+  const c = chrome === "dark" ? kit.browserDark : kit.browser;
   const { width: vw, height: vh } = manifest.viewport;
-  const bar = 44;
+  const bar = chrome === "none" ? 0 : 44;
   const height = (width * vh) / vw;
   const s = width / vw;
 
@@ -114,27 +121,29 @@ export const Walkthrough: React.FC<{
   return (
     <div
       style={{
-        position: "absolute", left: x, top: y, width, height: height + bar, borderRadius: 18, overflow: "hidden",
-        background: "#ffffff", boxShadow: "0 30px 80px rgba(34,49,58,0.22), 0 0 0 1px rgba(34,49,58,0.08)",
+        position: "absolute", left: x, top: y, width, height: height + bar, borderRadius: radius, overflow: "hidden",
+        background: c.frame, boxShadow: c.shadow,
         opacity: appear, transform: `translateY(${(1 - appear) * 30}px)`,
       }}
     >
-      <div style={{ height: bar, background: "#eef0f2", display: "flex", alignItems: "center", gap: 9, padding: "0 18px", borderBottom: "1px solid #e1e4e8" }}>
-        {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
-          <div key={c} style={{ width: 13, height: 13, borderRadius: 7, background: c }} />
-        ))}
-        <div style={{ marginLeft: 18, flex: 1, maxWidth: 420, height: 26, borderRadius: 8, background: "#ffffff", display: "flex", alignItems: "center", padding: "0 12px", font: `700 15px ${t.fonts.body}`, color: t.muted }}>
-          {title}
+      {bar > 0 && (
+        <div style={{ height: bar, background: c.bar, display: "flex", alignItems: "center", gap: 9, padding: "0 18px", borderBottom: `1px solid ${c.barLine}` }}>
+          {c.dots.map((d) => (
+            <div key={d} style={{ width: 13, height: 13, borderRadius: 7, background: d }} />
+          ))}
+          <div style={{ marginLeft: 18, flex: 1, maxWidth: 420, height: 26, borderRadius: 8, background: c.url, display: "flex", alignItems: "center", padding: "0 12px", font: `700 15px ${t.fonts.body}`, color: c.urlText ?? t.muted }}>
+            {title}
+          </div>
         </div>
-      </div>
-      <div style={{ position: "relative", width, height, overflow: "hidden", background: "#ffffff" }}>
+      )}
+      <div style={{ position: "relative", width, height, overflow: "hidden", background: c.frame }}>
         {prevStep && fade < 1 && img(prevStep.shot, 1)}
         {step && img(step.shot, fade)}
         {tb && spot > 0 && (
           <div
             style={{
               position: "absolute", left: tb.x - 8, top: tb.y - 8, width: tb.w + 16, height: tb.h + 16, borderRadius: 12,
-              border: `3px solid ${accent}`, boxShadow: `0 0 0 4000px rgba(20,28,36,${0.22 * spot})`, opacity: spot,
+              border: `3px solid ${accent}`, boxShadow: `0 0 0 4000px rgba(${c.spotlight},${0.22 * spot})`, opacity: spot,
             }}
           />
         )}
@@ -143,8 +152,8 @@ export const Walkthrough: React.FC<{
             style={{
               position: "absolute", left: Math.min(width - 20, Math.max(20, tb.x + tb.w / 2)), top: calloutBelow ? tb.y + tb.h + 18 : tb.y - 18,
               transform: `translate(-50%, ${calloutBelow ? "0" : "-100%"}) translateX(${tb.x + tb.w / 2 < 220 ? "40%" : tb.x + tb.w / 2 > width - 220 ? "-40%" : "0"})`,
-              background: accent, color: "#ffffff", font: `800 24px ${t.fonts.body}`, padding: "10px 18px", borderRadius: 12,
-              whiteSpace: "nowrap", opacity: spot, boxShadow: "0 10px 26px rgba(20,28,36,0.25)",
+              background: accent, color: c.calloutText, font: `800 24px ${t.fonts.body}`, padding: "10px 18px", borderRadius: 12,
+              whiteSpace: "nowrap", opacity: spot, boxShadow: `0 10px 26px rgba(${c.spotlight},0.25)`,
             }}
           >
             {callout}
@@ -160,7 +169,7 @@ export const Walkthrough: React.FC<{
                 }}
               />
             )}
-            <div style={{ position: "absolute", left: cursorPt.x - 4, top: cursorPt.y - 3, transform: `scale(${frame >= clickAt && frame < clickAt + 5 ? 0.85 : 1})` }}><Cursor /></div>
+            <div style={{ position: "absolute", left: cursorPt.x - 4, top: cursorPt.y - 3, transform: `scale(${frame >= clickAt && frame < clickAt + 5 ? 0.85 : 1})` }}><Cursor c={c} /></div>
           </>
         )}
       </div>

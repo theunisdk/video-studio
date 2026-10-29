@@ -4,6 +4,7 @@ import { loadFont as loadBody } from "@remotion/google-fonts/AtkinsonHyperlegibl
 import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
 import { loadFont as loadFraunces } from "@remotion/google-fonts/Fraunces";
 import { loadFont as loadNunito } from "@remotion/google-fonts/NunitoSans";
+import type { KitColors } from "./tokens";
 
 const display = loadDisplay("normal", { weights: ["500", "700"], subsets: ["latin"] });
 const body = loadBody("normal", { weights: ["400", "700"], subsets: ["latin"] });
@@ -51,6 +52,8 @@ export type Theme = {
     meText?: string;
     glow: boolean;
   };
+  /** Colours for kit parts (star field, step tracker, browser frame, furniture); legacy values when left out. */
+  kit?: KitColors;
 };
 
 export const darkTheme: Theme = {

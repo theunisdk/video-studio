@@ -1,0 +1,26 @@
+{
+  "look": "field-guide",
+  "palette": {
+    "bg": "#f3efe6",
+    "surface": "#fffdf7",
+    "fg": "#1f2b24",
+    "muted": "#5f6b62",
+    "line": "#d8d0bf",
+    "accent": "#d9572b",
+    "onAccent": "#fffdf7",
+    "accents": ["#2f6f5e", "#e0a526"]
+  },
+  "fonts": {
+    "display": { "family": "Bricolage Grotesque", "weights": [600, 800] },
+    "body": { "family": "Figtree", "weights": [400, 700] },
+    "mono": { "family": "IBM Plex Mono", "weights": [400, 600] }
+  },
+  "type": { "titleCase": "none", "titleTracking": -0.01, "titleScale": 1 },
+  "shape": { "radius": 10, "stroke": 2, "shadow": "hard" },
+  "background": { "kind": "dots", "angle": 160, "size": 40, "grain": 0.05 },
+  "motion": "calm",
+  "transition": { "kind": "wipe", "frames": 18, "direction": "left" },
+  "title": "lowerThird",
+  "caption": "highlight",
+  "logo": { "src": "assets/logo.svg", "placement": "top-right", "height": 64 }
+}

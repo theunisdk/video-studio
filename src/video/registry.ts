@@ -1,7 +1,8 @@
+import type { Design } from "./design";
 import { videoSchema, voiceManifestSchema } from "./schema";
 import { buildTimeline, type Timeline } from "./timeline";
 
-export type VideoProps = { videoId: string; timeline: Timeline };
+export type VideoProps = { videoId: string; timeline: Timeline; design?: Design };
 
 export type VideoEntry = {
   /** Composition id and out/ folder name. */
@@ -12,6 +13,10 @@ export type VideoEntry = {
   width: number;
   height: number;
   timeline: Timeline;
+  /** The video.json design block, parsed with its defaults filled in. */
+  design?: Design;
+  /** The series this video's look came from. */
+  series?: string;
   Component: React.FC<VideoProps>;
 };
 
@@ -26,6 +31,8 @@ export const defineVideo = (specJson: unknown, voiceJson: unknown, Component: Vi
     width: spec.width,
     height: spec.height,
     timeline: buildTimeline(spec, voice),
+    ...(spec.design ? { design: spec.design } : {}),
+    ...(spec.series ? { series: spec.series } : {}),
     Component,
   };
 };

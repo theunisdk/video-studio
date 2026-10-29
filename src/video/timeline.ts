@@ -1,9 +1,12 @@
+import type { TitleTreatment, TransitionSpec } from "./design";
 import { voiceFingerprint, type Alignment, type VideoSpec, type VoiceManifest } from "./schema";
 
 export type TimedScene = {
   id: string;
   index: number;
+  /** "" when the scene has none. */
   kicker: string;
+  /** "" when the scene has none. */
   headline: string;
   narration: string;
   from: number;
@@ -13,6 +16,8 @@ export type TimedScene = {
   audioSeconds: number;
   alignment: Alignment | null;
   placeholder: boolean;
+  title?: TitleTreatment;
+  transition?: TransitionSpec;
 };
 
 export type Timeline = {
@@ -43,8 +48,8 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     const timed: TimedScene = {
       id: scene.id,
       index,
-      kicker: scene.kicker,
-      headline: scene.headline,
+      kicker: scene.kicker ?? "",
+      headline: scene.headline ?? "",
       narration: scene.narration,
       from: cursor,
       durationInFrames,
@@ -53,6 +58,8 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
       audioSeconds: clip.durationSeconds,
       alignment: clip.alignment,
       placeholder: clip.placeholder,
+      ...(scene.title ? { title: scene.title } : {}),
+      ...(scene.transition ? { transition: scene.transition } : {}),
     };
     cursor += durationInFrames;
     return timed;
@@ -66,6 +73,10 @@ export const sceneById = (timeline: Timeline, id: string): TimedScene => {
   return scene;
 };
 
+/** True when the scene's narration has character timings that match its text (real ElevenLabs alignment). */
+export const hasWordTimings = (scene: TimedScene): boolean =>
+  !!scene.alignment && scene.alignment.characters.length === scene.narration.length;
+
 /** Absolute frame at which `phrase` starts being spoken in this scene's narration. */
 export const phraseFrame = (scene: TimedScene, phrase: string, fps: number): number => {
   const offset = scene.narration.indexOf(phrase);
@@ -77,3 +88,7 @@ export const phraseFrame = (scene: TimedScene, phrase: string, fps: number): num
       : (offset / scene.narration.length) * scene.audioSeconds;
   return scene.audioFrom + Math.round(seconds * fps);
 };
+
+/** Like phraseFrame, but null when the scene has no word timings, for effects that must land on the exact word. */
+export const wordFrame = (scene: TimedScene, phrase: string, fps: number): number | null =>
+  hasWordTimings(scene) ? phraseFrame(scene, phrase, fps) : null;

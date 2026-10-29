@@ -4,6 +4,8 @@ import { ThreeCanvas } from "@remotion/three";
 import { useThree } from "@react-three/fiber";
 import { NeutralToneMapping, PCFSoftShadowMap } from "three";
 import { colors, darkTheme, ThemeContext, type Theme } from "./theme";
+import { Backdrop } from "./backdrop";
+import { useDesign } from "./design";
 import { projectPoint, toThreeCamera, type CameraState, type Projection, type Vec3 } from "./camera";
 
 const ProjectorContext = createContext<((p: Vec3) => Projection) | null>(null);
@@ -37,12 +39,15 @@ export const Stage: React.FC<{
   camera: CameraState;
   world: React.ReactNode;
   overlay?: React.ReactNode;
-  /** Any CSS background; the WebGL canvas is transparent over it. */
+  /** Any CSS background; the WebGL canvas is transparent over it. Inside a <Designed>, the design's <Backdrop>. */
   background?: string;
   look?: "flat" | "lit";
   theme?: Theme;
-}> = ({ camera, world, overlay, background = colors.bg, look = "flat", theme = darkTheme }) => {
+}> = ({ camera, world, overlay, background: backgroundProp, look = "flat", theme: themeProp }) => {
   const { width, height } = useVideoConfig();
+  const design = useDesign();
+  const background = backgroundProp ?? (design ? undefined : colors.bg);
+  const theme = themeProp ?? design?.theme ?? darkTheme;
   const project = useMemo(() => {
     const cam = toThreeCamera(camera, width, height);
     return (p: Vec3) => projectPoint(cam, width, height, p);
@@ -50,6 +55,7 @@ export const Stage: React.FC<{
 
   return (
     <AbsoluteFill style={{ background }}>
+      {background === undefined && <Backdrop />}
       <ThreeCanvas
         width={width}
         height={height}

@@ -2,6 +2,7 @@
 import { useCurrentFrame } from "remotion";
 import { ramp } from "./anim";
 import { useTheme } from "./theme";
+import { useKit } from "./tokens";
 
 export type Point = { x: number; y: number };
 
@@ -15,7 +16,9 @@ export type AvatarLook = {
 };
 
 /** A faceless bust in a circle, like a profile picture. */
-export const Avatar: React.FC<{ look: AvatarLook; size: number; ring: string; active?: number }> = ({ look, size, ring, active = 1 }) => (
+export const Avatar: React.FC<{ look: AvatarLook; size: number; ring: string; active?: number }> = ({ look, size, ring, active = 1 }) => {
+  const { highlight } = useKit();
+  return (
   <svg width={size} height={size} viewBox="0 0 100 100" style={{ display: "block", opacity: 0.45 + 0.55 * active }}>
     <defs>
       <clipPath id={`avatar-${look.top}-${look.hairStyle}`}>
@@ -33,14 +36,15 @@ export const Avatar: React.FC<{ look: AvatarLook; size: number; ring: string; ac
       {look.hairStyle === "bun" && <circle cx="50" cy="22" r="8" fill={look.hair} />}
       {look.badge && (
         <g transform="translate(62 82)">
-          <rect x="-6" y="-6" width="12" height="12" rx="3" fill="#ffffff" />
+          <rect x="-6" y="-6" width="12" height="12" rx="3" fill={highlight} />
           <rect x="-1.4" y="-4.2" width="2.8" height="8.4" fill={look.top} />
           <rect x="-4.2" y="-1.4" width="8.4" height="2.8" fill={look.top} />
         </g>
       )}
     </g>
   </svg>
-);
+  );
+};
 
 /** Avatar plus name and a small place line ("at the clinic"). */
 export const RoleTag: React.FC<{ look: AvatarLook; name: string; place: string; color: string; x: number; y: number; appear: number; active?: number; align?: "left" | "right"; scale?: number }> = ({
@@ -97,6 +101,7 @@ export const FlowLine: React.FC<{ from: Point; to: Point; color: string; appear:
   packets = [],
 }) => {
   const frame = useCurrentFrame();
+  const { highlight } = useKit();
   if (appear <= 0.001) return null;
   const q = quad(from, to, bend);
   return (
@@ -112,7 +117,7 @@ export const FlowLine: React.FC<{ from: Point; to: Point; color: string; appear:
               <rect x={-22} y={-15} width={44} height={30} rx={11} fill={p.color} />
               <path d="M -8 15 L -2 15 L -10 23 Z" fill={p.color} />
               {[-9, 0, 9].map((dx) => (
-                <circle key={dx} cx={dx} cy={0} r={3.2} fill="#ffffff" />
+                <circle key={dx} cx={dx} cy={0} r={3.2} fill={highlight} />
               ))}
             </g>
           );
@@ -124,6 +129,7 @@ export const FlowLine: React.FC<{ from: Point; to: Point; color: string; appear:
 /** Horizontal step tracker; `progress` is the fractional index of the current step. */
 export const StepTracker: React.FC<{ steps: string[]; current: number; x: number; y: number; color: string; appear: number }> = ({ steps, current, x, y, color, appear }) => {
   const t = useTheme();
+  const { tracker } = useKit();
   if (appear <= 0.001) return null;
   return (
     <div style={{ position: "absolute", left: x, top: y, display: "flex", alignItems: "flex-start", opacity: Math.min(1, appear) }}>
@@ -137,8 +143,8 @@ export const StepTracker: React.FC<{ steps: string[]; current: number; x: number
               <div
                 style={{
                   width: 32, height: 32, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: done || active ? color : "#ffffff", border: `2px solid ${done || active ? color : t.line}`,
-                  color: done || active ? "#ffffff" : t.muted, font: `800 16px ${t.fonts.body}`,
+                  background: done || active ? color : tracker.idle, border: `2px solid ${done || active ? color : t.line}`,
+                  color: done || active ? tracker.onActive : t.muted, font: `800 16px ${t.fonts.body}`,
                   boxShadow: active ? `0 0 0 6px ${color}33` : "none",
                 }}
               >
