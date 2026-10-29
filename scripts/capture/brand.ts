@@ -4,7 +4,7 @@
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAvailableFonts } from "@remotion/google-fonts";
-import { request, type APIRequestContext, type Page } from "playwright";
+import type { Page } from "playwright";
 
 type ColorRole = "background" | "surface" | "text" | "muted" | "link" | "button" | "accent" | "border";
 type FontRole = "heading" | "body" | "mono" | "ui";
@@ -51,12 +51,17 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
   const brandDir = join(researchDir, "brand");
   mkdirSync(brandDir, { recursive: true });
 
-  // Its own cookie jar, so these downloads cannot change how the later pages of the capture load.
-  const http = await request.newContext({ userAgent: await page.evaluate(() => navigator.userAgent) });
+  // Downloads skip the browser's cookie jar, so they cannot change how the later pages of the capture load.
+  const userAgent = await page.evaluate(() => navigator.userAgent);
+  // SVGs are cleaned in a blank page of a separate context: the site's own scripts could tamper with DOMParser in its page.
+  const browser = page.context().browser();
+  if (!browser) throw new Error("no browser to sanitise SVGs in");
+  const sandbox = await browser.newContext();
+  const clean = async (svg: string) => inPage(sandbox.pages()[0] ?? (await sandbox.newPage()), sanitiseSvg, svg);
   const save = async (name: string, candidates: string[]): Promise<string | null> => {
     for (const url of candidates) {
       if (/^data:[^,]*,$/.test(url)) continue;
-      let body = await download(http, url).catch((e: Error) => {
+      let body = await download(url, userAgent).catch((e: Error) => {
         console.error(`brand: could not download ${name} from ${url}: ${e.message.split("\n")[0]}`);
         return null;
       });
@@ -64,12 +69,12 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
       if (body && !ext) console.error(`brand: ${name} at ${url} is not an image`);
       if (!body || !ext) continue;
       if (ext === "svg") {
-        const clean = await inPage(page, sanitiseSvg, body.toString("utf8")).catch(() => null);
-        if (!clean) {
-          console.error(`brand: ${name} at ${url} is not a valid SVG`);
-          continue;
-        }
-        body = Buffer.from(clean);
+        const svg = await clean(body.toString("utf8")).catch((e: Error) => {
+          console.error(`brand: ${name} at ${url} is not a usable SVG: ${e.message.split("\n")[0]}`);
+          return null;
+        });
+        if (!svg) continue;
+        body = Buffer.from(svg);
       }
       writeFileSync(join(brandDir, `${name}.${ext}`), body);
       return `research/brand/${name}.${ext}`;
@@ -82,13 +87,19 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
   let ogImage: string | null = null;
   try {
     if (collected.logo && "svg" in collected.logo) {
-      writeFileSync(join(brandDir, "logo.svg"), await inPage(page, sanitiseSvg, collected.logo.svg));
-      logo = "research/brand/logo.svg";
+      const svg = await clean(collected.logo.svg).catch((e: Error) => {
+        console.error(`brand: the header's inline logo is not a usable SVG: ${e.message.split("\n")[0]}`);
+        return null;
+      });
+      if (svg) {
+        writeFileSync(join(brandDir, "logo.svg"), svg);
+        logo = "research/brand/logo.svg";
+      }
     } else if (collected.logo) logo = await save("logo", [collected.logo.url]);
     favicon = await save("favicon", rankFavicons(collected.favicons, page.url()));
     ogImage = collected.ogImage ? await save("og-image", [collected.ogImage]) : null;
   } finally {
-    await http.dispose();
+    await sandbox.close();
   }
 
   const brand: Brand = {
@@ -114,22 +125,29 @@ function sanitiseSvg(text: string): string {
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const svg = doc.documentElement;
   if (svg.localName !== "svg" || doc.querySelector("parsererror")) throw new Error("not an SVG document");
-  for (const el of svg.querySelectorAll("script, foreignObject")) el.remove();
+  for (const el of svg.querySelectorAll("script, foreignObject, animate, set, animateMotion, animateTransform, discard")) el.remove();
   for (const el of [svg, ...svg.querySelectorAll("*")]) {
-    for (const a of [...el.attributes]) if (/^on/i.test(a.name) || (/href$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) el.removeAttribute(a.name);
+    for (const a of [...el.attributes]) {
+      const external = /href$/i.test(a.name) && !/^(#|data:image\/)/i.test(a.value.trim());
+      if (/^on/i.test(a.name) || external || /^javascript:/i.test(a.value.replace(/[\x00-\x20]/g, ""))) el.removeAttribute(a.name);
+    }
   }
   return new XMLSerializer().serializeToString(svg);
 }
 
-async function download(http: APIRequestContext, url: string): Promise<Buffer> {
+async function download(url: string, userAgent: string): Promise<Buffer> {
   const data = /^data:([^,]*?)(;base64)?,(.*)$/s.exec(url);
   if (data) return data[2] ? Buffer.from(data[3], "base64") : Buffer.from(decodeURIComponent(data[3]));
-  const response = await http.get(url, { timeout: 20_000 });
-  if (!response.ok()) throw new Error(`HTTP ${response.status()}`);
-  if (Number(response.headers()["content-length"]) > MAX_FILE_BYTES) throw new Error("file is too large");
-  const body = await response.body();
-  if (body.length > MAX_FILE_BYTES) throw new Error(`${body.length} bytes is too large`);
-  return body;
+  const response = await fetch(url, { headers: { "user-agent": userAgent }, signal: AbortSignal.timeout(20_000) });
+  if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > MAX_FILE_BYTES) throw new Error(`larger than ${MAX_FILE_BYTES} bytes`);
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 /** The real file type from its first bytes, since servers often send the wrong content type. */
@@ -286,6 +304,7 @@ function collect(): Collected {
   const BUTTON = 'button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]';
   const UI = `${BUTTON}, input, select, textarea, label, nav, [role="navigation"], [role="tab"], [role="menuitem"]`;
   const CONSENT = /onetrust|cookie|consent|gdpr|usercentrics|didomi/i;
+  const CONSENT_ROOT = /^(onetrust-consent-sdk|usercentrics-root|usercentrics-cmp-ui|CybotCookiebotDialog|didomi-host)$/;
   const COLOR_RE = /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)|#[0-9a-f]{3,8}\b/gi;
   const stops = (image: string) => image.replace(/url\((?:"[^"]*"|'[^']*'|[^)]*)\)/g, "").match(COLOR_RE) ?? [];
 
@@ -339,7 +358,7 @@ function collect(): Collected {
   const opaque = (css: string) => (parse(css)?.alpha ?? 0) >= 0.5;
   const rootBg = getComputedStyle(doc).backgroundColor;
   const bodyBg = document.body ? getComputedStyle(document.body).backgroundColor : "";
-  const canvasEl = opaque(rootBg) || !document.body ? doc : document.body;
+  const canvasEl = opaque(rootBg) || getComputedStyle(doc).backgroundImage !== "none" || !document.body ? doc : document.body;
   const canvasBg = opaque(rootBg) ? rootBg : opaque(bodyBg) ? bodyBg : "#ffffff";
   const page = { r: { x: 0, y: 0, w: docW, h: docH }, sub: 0 };
 
@@ -358,8 +377,10 @@ function collect(): Collected {
   const visit = (el: Element, owner: { r: Rect; sub: number }) => {
     if (/^(HEAD|SCRIPT|STYLE|NOSCRIPT|TEMPLATE|LINK|META)$/.test(el.tagName)) return;
     const cs = getComputedStyle(el);
-    // A cookie banner is the consent tool's styling, not the site's. Consent tools also tag <body>, so only overlays count.
-    if (/^(fixed|sticky)$/.test(cs.position) && CONSENT.test(`${el.id} ${el.getAttribute("class") ?? ""}`)) return;
+    // A cookie banner is the consent tool's styling, not the site's. Consent tools also tag <body>, so only overlays and
+    // the tools' own root elements count.
+    const tagged = `${el.id} ${el.getAttribute("class") ?? ""}`;
+    if (CONSENT.test(tagged) && (/^(fixed|sticky)$/.test(cs.position) || CONSENT_ROOT.test(el.id))) return;
     const box = cs.display !== "contents";
     if (box && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
     const r = box ? clip(el.getBoundingClientRect()) : { x: 0, y: 0, w: 0, h: 0 };
@@ -452,7 +473,7 @@ function collect(): Collected {
     const a = el.closest("a[href]") as HTMLAnchorElement | null;
     if (!a || !URL.canParse(a.href, location.href)) return false;
     const u = new URL(a.href, location.href);
-    return u.hostname.replace(/^www\./, "") === location.hostname.replace(/^www\./, "") && u.pathname === "/";
+    return u.hostname.replace(/^www\./, "") === location.hostname.replace(/^www\./, "") && /^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/?)?$/i.test(u.pathname);
   };
   const shown = (el: Element) => {
     const r = el.getBoundingClientRect();
@@ -482,6 +503,8 @@ function collect(): Collected {
     const clone = svg.cloneNode(true) as SVGSVGElement;
     const from = [svg, ...svg.querySelectorAll("*")];
     const to = [clone, ...clone.querySelectorAll("*")];
+    // Framework attributes (@click, x-on:click, hx-on:*) are legal in HTML but not in a standalone SVG file.
+    for (const el of to) for (const a of [...el.attributes]) if (!/^(?:(?:xlink|xml|xmlns):)?[A-Za-z_][\w.-]*$/.test(a.name)) el.removeAttribute(a.name);
     // Fills set by the page's stylesheet (or currentColor) would be lost outside the page.
     const props = ["fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "opacity", "stop-color", "stop-opacity", "color"];
     from.forEach((src, i) => {
