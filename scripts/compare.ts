@@ -74,7 +74,7 @@ const latestSheet = (outId: string, { skipStoryboard = false } = {}): Sheet | nu
   }
   if (!skipStoryboard && existsSync(join(dir, "stills", "contact.jpg"))) {
     const file = join(dir, "stills", "contact.jpg");
-    return { label: `${outId} storyboard (not rendered yet)`, file, time: statSync(file).mtimeMs };
+    return { label: `${outId} storyboard${mp4s[0] ? "" : " (not rendered yet)"}`, file, time: statSync(file).mtimeMs };
   }
   if (mp4s[0]) {
     const mp4 = join(dir, mp4s[0]);

@@ -3,6 +3,7 @@
 //   pnpm series:use <name> <videoId>      copy series/<name>/ into videos/<videoId>/ for a new episode
 // An episode copies the series (tokens, components, brand files) rather than pointing at it,
 // so it renders the same way forever and works when its folder is copied on its own.
+import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { designFiles, designSchema, type Design } from "../src/video/design";
@@ -40,21 +41,25 @@ const remapFiles = (d: Design, map: (p: string) => string): Design => {
   };
 };
 
-const transitionText = (t: Design["transition"]) => (t.kind === "cut" ? "cut" : `${t.kind} ${t.direction} (${t.frames} frames)`);
+const transitionText = (t: Design["transition"]) =>
+  t.kind === "cut" ? "cut" : `${t.kind}${t.kind === "wipe" || t.kind === "push" ? ` ${t.direction}` : ""} (${t.frames} frames)`;
 
 /** Where a scene sits, in words another episode can follow (its id is the source video's own). */
 const position = (i: number, count: number, id: string) =>
   `${i === 0 ? "the opening scene" : i === count - 1 ? "the closing scene" : `scene ${i + 1} of ${count}`} (\`${id}\` in the source)`;
 
-const overrides = (scenes: SceneSpec[], pick: (s: SceneSpec) => string | undefined) =>
+const overrides = (scenes: SceneSpec[], pick: (s: SceneSpec, i: number) => string | undefined) =>
   scenes.flatMap((s, i) => {
-    const value = pick(s);
+    const value = pick(s, i);
     return value ? [`${position(i, scenes.length, s.id)} uses ${value}`] : [];
   });
 
 const continuity = (d: Design, meta: SeriesMeta, scenes: SceneSpec[]) => {
   const titleOverrides = overrides(scenes, (s) => (s.title && s.title !== d.title ? s.title : undefined));
-  const transitionOverrides = overrides(scenes, (s) => (s.transition ? transitionText(s.transition) : undefined));
+  // A transition belongs to the edge into its scene, so the opening scene has none.
+  const transitionOverrides = overrides(scenes, (s, i) =>
+    i > 0 && s.transition && JSON.stringify(s.transition) !== JSON.stringify(d.transition) ? transitionText(s.transition) : undefined,
+  );
   const kicked = scenes.filter((s) => s.kicker);
   const drawnByScenes = kicked.some((s) => (s.title ?? d.title) === "none");
   const kickers = kicked.length
@@ -97,15 +102,26 @@ ${text
   .join("\n")}
 `;
 
+/** True for a video committed to the repo (the public examples), whose files must never name a series. */
+const isPublic = (file: string) => {
+  try {
+    execFileSync("git", ["check-ignore", "-q", file], { stdio: "ignore" });
+    return false;
+  } catch (e) {
+    return (e as { status?: number }).status === 1;
+  }
+};
+
 const exportSeries = (videoId: string, name: string) => {
   const src = join("videos", videoId);
   const spec = readJson(join(src, "video.json"));
-  if (!spec.design) throw new Error(`videos/${videoId}/video.json has no design block to export`);
   const { design, scenes } = videoSchema.parse(spec);
   if (!design) throw new Error(`videos/${videoId}/video.json has no design block to export`);
-  if (spec.series && spec.series !== name) {
+  if (spec.series && spec.series !== name && existsSync(join("series", String(spec.series)))) {
     throw new Error(`videos/${videoId} is already an episode of series "${String(spec.series)}"; use that series (pnpm series:use ${String(spec.series)} <id>)`);
   }
+  const specPath = join(src, "video.json");
+  const markSource = !isPublic(specPath);
   const dest = join("series", name);
   if (existsSync(dest)) throw new Error(`${dest} already exists; pick another name, or delete it first if it should be replaced`);
 
@@ -117,7 +133,9 @@ const exportSeries = (videoId: string, name: string) => {
     if ([...moved.values()].includes(target)) throw new Error(`two design files would both be saved as ${target}; rename one`);
     moved.set(file, target);
   }
-  const components = existsSync(join(src, "components")) ? readdirSync(join(src, "components")).filter((f) => /\.tsx?$/.test(f)) : [];
+  const entries = existsSync(join(src, "components")) ? readdirSync(join(src, "components"), { withFileTypes: true }) : [];
+  const components = entries.filter((f) => f.isFile() && /\.tsx?$/.test(f.name)).map((f) => f.name);
+  const left = entries.filter((f) => !components.includes(f.name)).map((f) => f.name);
   const work = `${dest}.tmp-${process.pid}`;
   rmSync(work, { recursive: true, force: true });
   const meta: SeriesMeta = { name, exportedFrom: videoId, exportedAt: new Date().toISOString(), voice: spec.voice };
@@ -136,12 +154,23 @@ const exportSeries = (videoId: string, name: string) => {
     throw e;
   }
   // The source is the series' first episode, so the next episode's pnpm compare finds it.
-  spec.series = name;
-  writeJson(join(src, "video.json"), spec);
+  if (markSource) {
+    try {
+      writeJson(specPath, { ...spec, series: name });
+    } catch (e) {
+      rmSync(dest, { recursive: true, force: true });
+      throw new Error(`series ${name} was not saved: ${specPath} could not be updated: ${(e as Error).message}`);
+    }
+  }
 
   console.log(`series ${dest}`);
   console.log(`  design.json, series.json, design.md${components.length ? `, components/ (${components.join(", ")})` : ""}${moved.size ? `, assets/ (${[...moved.values()].map((p) => basename(p)).join(", ")})` : ""}`);
-  console.log(`  videos/${videoId}/video.json: series ${name} (it is the first episode)`);
+  if (left.length) console.log(`  not copied from components/ (only .ts and .tsx files directly in it travel): ${left.join(", ")}`);
+  console.log(
+    markSource
+      ? `  ${specPath}: series ${name} (it is the first episode)`
+      : `  ${specPath} is a public example, so it is not marked as an episode; the first video made with series:use is`,
+  );
   console.log(`Read ${join(dest, "design.md")} and tighten its Continuity section: say what must stay fixed and what may vary.`);
 };
 

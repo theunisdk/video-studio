@@ -143,7 +143,7 @@ matches how it looks, starting from the closest entry in the looks library (`neo
 for getting-started), then export:
 
 Series parts, such as an intro or outro card, go in `videos/<id>/components/` before you export: export
-copies every `.ts` and `.tsx` file directly in that folder to `series/<name>/components/`, and `series:use`
+copies every `.ts` and `.tsx` file directly in that folder (not subfolders) to `series/<name>/components/`, and `series:use`
 copies them into each episode's `videos/<id>/components/`. `Video.tsx` imports them from `./components/...`.
 They import the kit as `../../../src/kit/...`, which resolves from both folders. Only those files travel:
 an image a part needs must be a design file (the logo, a font, a texture).
@@ -152,7 +152,8 @@ an image a part needs must be a design file (the logo, a font, a texture).
 pnpm series:export <id> <name>  # writes series/<name>/ from videos/<id>/, and sets "series": "<name>" in its video.json
 ```
 
-The source video becomes the series' first episode, so `pnpm compare` on the next episode finds it.
+The source video becomes the series' first episode, so `pnpm compare` on the next episode finds it. The two
+public examples are the exception: export never writes a series name into a tracked file.
 `series/<name>/design.md` starts with a Continuity section generated from the design block and the scenes,
 per-scene title and transition overrides included, then quotes the source video's `design.md` under "Notes
 from the source video". Those notes are that video's own prose and bind no other episode. Read the file and
@@ -195,10 +196,11 @@ preview scenes first; `pnpm render <id> --preview` renders them, and a full rend
 narration exists. Changing the voice or its settings needs a fresh `pnpm voice`.
 
 **Reusing narration.** To give a video the narration of another one (a re-cut, a new look, an episode with
-the same lines), copy the other video's `audio/` folder and `voice.json` into `videos/<id>/`, then run
-`pnpm voice <id>`. The cache key is the text and the voice, so every scene whose narration and voice match
-finds its clip and its word timings. When all of them match, no key is needed. That run also rewrites `voice.json` for this
-video: a copied one still names the source in `"videoId"`, and the video does not load until it matches.
+the same lines), copy the other video's `audio/` folder into `videos/<id>/`, then run `pnpm voice <id>`.
+The cache key is the text and the voice, so every scene whose narration and voice match finds its clip and
+its word timings. When all of them match, no key is needed. That run writes this video's `voice.json`. Do not
+copy `voice.json` itself: a copied one names the source in `"videoId"`, and the video does not load until
+`pnpm voice <id>` rewrites it.
 
 **Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with
 `pnpm voice <id> --adopt <sceneId>=<file.mp3>`. The scene's narration must still say what the file says.

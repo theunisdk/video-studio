@@ -32,6 +32,14 @@ export const checkFonts = async (d: Design): Promise<string[]> => {
   return errors;
 };
 
+const skipDirs = new Set(["versions", "node_modules", "audio", "research", "capture", "assets", "media"]);
+
+/** The .ts and .tsx files of a video folder, without its saved versions and media. */
+const sourceFiles = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? (skipDirs.has(e.name) ? [] : sourceFiles(join(dir, e.name))) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : [],
+  );
+
 export const checkDesign = async (video: VideoEntry): Promise<DesignCheck> => {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -39,8 +47,7 @@ export const checkDesign = async (video: VideoEntry): Promise<DesignCheck> => {
   const d = video.design;
   if (!d) return { errors, warnings, notes };
   const dir = join("videos", video.videoId);
-  const code = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) => /\.tsx?$/.test(f) && !/^(versions|node_modules)[/\\]/.test(f));
-  if (!code.some((f) => readFileSync(join(dir, f), "utf8").includes("<Designed"))) {
+  if (!sourceFiles(dir).some((f) => /<Designed[\s>]/.test(readFileSync(f, "utf8")))) {
     warnings.push(`video.json has a design block, but no file in ${dir} mounts <Designed>, so the design has no effect`);
   }
   for (const file of designFiles(d)) {
