@@ -26,8 +26,8 @@ export const copySources = (from: string, to: string) => {
 };
 
 /**
- * Replaces the source entries of `dir` with those of `from`. A folder the snapshot does not have
- * (assets/ in a snapshot that predates it) is left as it is; other files and folders are untouched.
+ * Replaces the source entries of `dir` with those of `from`. A components/ or assets/ folder the snapshot
+ * does not have is left as it is; other files and folders are untouched.
  */
 export const replaceSources = (from: string, dir: string) => {
   const incoming = sourceEntries(from);

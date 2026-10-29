@@ -128,6 +128,9 @@ export const useRequiredDesign = (): ResolvedDesign => {
 /** The design's motion preset; "calm" when there is no design. */
 export const useMotion = (): MotionPreset => useDesign()?.motionPreset ?? motion.calm;
 
+// CJK families come in about 100 subset files per weight, far past delayRender's 30 s default.
+const FONT_TIMEOUT_MS = 180_000;
+
 // One load per font across every <Designed> in the bundle (the gallery mounts many). A failed load is
 // forgotten, so the next attempt tries again instead of repeating a stale error.
 const fontLoads = new Map<string, Promise<void>>();
@@ -159,15 +162,9 @@ const loadGoogle = (family: string, weights: number[]): Promise<void> => {
       document.head.appendChild(link);
     }).then(async () => {
       // Every subset, not just the one a test string would pick, so no glyph falls back mid-render.
-      // CJK families come in ~100 slices per weight; those load the Latin faces only, to stay inside delayRender's timeout.
       const faces = [...document.fonts].filter((f) => f.family.replace(/["']/g, "") === family);
       if (faces.length === 0) throw new Error(`Font "${family}" loaded no faces`);
-      if (faces.length > 40 * ws.length) {
-        console.warn(`Font "${family}" has ${faces.length} faces; loading Latin only, other scripts load as they appear`);
-        await Promise.all(ws.map((w) => document.fonts.load(`${w} 40px "${family}"`, "Aa")));
-      } else {
-        await Promise.all(faces.map((f) => f.load()));
-      }
+      await Promise.all(faces.map((f) => f.load()));
     }),
   );
 };
@@ -202,11 +199,11 @@ export const Designed: React.FC<{ videoId: string; design?: Design; children: Re
   const resolved = useMemo(() => (design ? resolveDesign(design, videoId) : null), [design, videoId]);
   // The first render must already wait, so its handle is taken during render; a later design (a Studio
   // prop change) takes its own in the effect.
-  const [first] = useState(() => (design ? delayRender(`Loading fonts for ${videoId}`) : null));
+  const [first] = useState(() => (design ? delayRender(`Loading fonts for ${videoId}`, { timeoutInMilliseconds: FONT_TIMEOUT_MS }) : null));
   const pending = useRef(first);
   useEffect(() => {
     if (!design) return;
-    const handle = pending.current ?? delayRender(`Loading fonts for ${videoId}`);
+    const handle = pending.current ?? delayRender(`Loading fonts for ${videoId}`, { timeoutInMilliseconds: FONT_TIMEOUT_MS });
     pending.current = null;
     let live = true;
     loadFonts(design, videoId).then(

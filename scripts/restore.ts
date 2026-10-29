@@ -12,7 +12,8 @@ if (!videoId || !versionArg || extra.length) throw new Error("Usage: pnpm restor
 const dir = join("videos", videoId);
 const versions = join(dir, "versions");
 if (!existsSync(versions)) throw new Error(`${versions} does not exist: no render of ${videoId} has saved its sources yet`);
-const saved = readdirSync(versions, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+// A .tmp- folder is a snapshot interrupted mid-copy, not a saved version.
+const saved = readdirSync(versions, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.includes(".tmp-")).map((d) => d.name);
 
 // An exact folder name wins (needed for variants, e.g. demo-flat-v2); otherwise "v2" or "2" picks <id>-v2.
 const n = /^v?(\d+)$/.exec(versionArg)?.[1];
