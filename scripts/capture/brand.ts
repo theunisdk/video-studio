@@ -62,7 +62,8 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
     for (const url of candidates) {
       if (/^data:[^,]*,$/.test(url)) continue;
       let body = await download(url, userAgent).catch((e: Error) => {
-        console.error(`brand: could not download ${name} from ${url}: ${e.message.split("\n")[0]}`);
+        const cause = (e.cause as Error | undefined)?.message;
+        console.error(`brand: could not download ${name} from ${url}: ${e.message.split("\n")[0]}${cause ? ` (${cause})` : ""}`);
         return null;
       });
       const ext = body && sniff(body);
@@ -74,7 +75,8 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
           return null;
         });
         if (!svg) continue;
-        body = Buffer.from(svg);
+        if (svg.stripped) console.error(`brand: ${name} at ${url} linked to other files, which were left out`);
+        body = Buffer.from(svg.svg);
       }
       writeFileSync(join(brandDir, `${name}.${ext}`), body);
       return `research/brand/${name}.${ext}`;
@@ -91,8 +93,9 @@ export async function captureBrand(page: Page, researchDir: string): Promise<Bra
         console.error(`brand: the header's inline logo is not a usable SVG: ${e.message.split("\n")[0]}`);
         return null;
       });
+      if (svg?.stripped) console.error("brand: the header's inline logo linked to other files, which were left out");
       if (svg) {
-        writeFileSync(join(brandDir, "logo.svg"), svg);
+        writeFileSync(join(brandDir, "logo.svg"), svg.svg);
         logo = "research/brand/logo.svg";
       }
     } else if (collected.logo) logo = await save("logo", [collected.logo.url]);
@@ -120,19 +123,40 @@ async function inPage<A, R>(page: Page, fn: (arg: A) => R, arg?: A): Promise<R> 
   return (await page.evaluate(`(() => { const __name = (f) => f; return (${fn})(${JSON.stringify(arg) ?? ""}); })()`)) as R;
 }
 
-/** Runs in the page. A site's SVG is untrusted: drop scripts, event handlers and embedded HTML before it is saved. */
-function sanitiseSvg(text: string): string {
+/**
+ * Runs in a blank page. A site's SVG is untrusted: keep only SVG-namespace elements, without scripts, animation, event
+ * handlers or references to other files, so opening the saved file runs and loads nothing.
+ */
+function sanitiseSvg(text: string): { svg: string; stripped: boolean } {
+  const SVG_NS = "http://www.w3.org/2000/svg";
   const doc = new DOMParser().parseFromString(text, "image/svg+xml");
   const svg = doc.documentElement;
-  if (svg.localName !== "svg" || doc.querySelector("parsererror")) throw new Error("not an SVG document");
-  for (const el of svg.querySelectorAll("script, foreignObject, animate, set, animateMotion, animateTransform, discard")) el.remove();
-  for (const el of [svg, ...svg.querySelectorAll("*")]) {
+  if (svg.namespaceURI !== SVG_NS || svg.localName !== "svg" || doc.getElementsByTagName("parsererror").length) throw new Error("not an SVG document");
+  for (const el of [...svg.getElementsByTagName("*")]) {
+    if (el.namespaceURI !== SVG_NS || /^(script|foreignObject|animate|set|animateMotion|animateTransform|discard)$/.test(el.localName)) el.remove();
+  }
+  let stripped = false;
+  const localUrls = (css: string) => {
+    const kept = css.replace(/@import[^;]*;?/gi, "").replace(/url\(\s*(["']?)(?!#|data:image\/)[^)]*\)/gi, "none");
+    if (kept !== css) stripped = true;
+    return kept;
+  };
+  for (const el of [svg, ...svg.getElementsByTagName("*")]) {
+    if (el.localName === "style") el.textContent = localUrls(el.textContent ?? "");
     for (const a of [...el.attributes]) {
-      const external = /href$/i.test(a.name) && !/^(#|data:image\/)/i.test(a.value.trim());
+      const value = a.value.trim();
+      const inlineImage = /^(image|feImage)$/.test(el.localName) && /^data:image\/(png|jpe?g|gif|webp)[;,]/i.test(value);
+      const external = /href$/i.test(a.name) && !value.startsWith("#") && !inlineImage;
+      if (external && /^(use|image|feImage)$/.test(el.localName)) stripped = true;
       if (/^on/i.test(a.name) || external || /^javascript:/i.test(a.value.replace(/[\x00-\x20]/g, ""))) el.removeAttribute(a.name);
+      else if (a.name === "style") el.setAttribute("style", localUrls(a.value));
     }
   }
-  return new XMLSerializer().serializeToString(svg);
+  const drawable = [...svg.getElementsByTagName("*")].some(
+    (el) => /^(path|rect|circle|ellipse|polygon|polyline|line|text)$/.test(el.localName) || (/^(use|image)$/.test(el.localName) && (el.hasAttribute("href") || el.hasAttribute("xlink:href"))),
+  );
+  if (!drawable) throw new Error(stripped ? "it only draws files it links to" : "it draws nothing");
+  return { svg: new XMLSerializer().serializeToString(svg), stripped };
 }
 
 async function download(url: string, userAgent: string): Promise<Buffer> {
@@ -469,11 +493,12 @@ function collect(): Collected {
     }
     return false;
   };
+  const lang = doc.lang.split("-")[0].toLowerCase();
   const homeLink = (el: Element) => {
     const a = el.closest("a[href]") as HTMLAnchorElement | null;
     if (!a || !URL.canParse(a.href, location.href)) return false;
     const u = new URL(a.href, location.href);
-    return u.hostname.replace(/^www\./, "") === location.hostname.replace(/^www\./, "") && /^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/?)?$/i.test(u.pathname);
+    return u.hostname.replace(/^www\./, "") === location.hostname.replace(/^www\./, "") && (u.pathname === "/" || /^\/[a-z]{2}[-_][a-z]{2}\/?$/i.test(u.pathname) || /^\/([a-z]{2})\/?$/i.exec(u.pathname)?.[1].toLowerCase() === lang);
   };
   const shown = (el: Element) => {
     const r = el.getBoundingClientRect();
