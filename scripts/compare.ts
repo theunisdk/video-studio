@@ -1,6 +1,6 @@
 // Usage: pnpm compare <videoId>
 // Puts this video's storyboard (out/<id>/stills/contact.jpg) above the contact sheets it should be
-// judged against, in out/<id>/stills/compare.jpg:
+// judged against, in out/<id>/compare.jpg (outside stills/, which every render clears):
 // - a video with no series: its own earlier look (last render) and the three other videos rendered most recently;
 //   the question is "does this look different?"
 // - a series episode: the previous episode in the same series; the question is "does this look like the same family?"
@@ -74,11 +74,11 @@ const latestSheet = (outId: string, { skipStoryboard = false } = {}): Sheet | nu
   }
   if (!skipStoryboard && existsSync(join(dir, "stills", "contact.jpg"))) {
     const file = join(dir, "stills", "contact.jpg");
-    return { label: `${outId} storyboard`, file, time: statSync(file).mtimeMs };
+    return { label: `${outId} storyboard${mp4s[0] ? "" : " (not rendered yet)"}`, file, time: statSync(file).mtimeMs };
   }
   if (mp4s[0]) {
     const mp4 = join(dir, mp4s[0]);
-    return { label: `${outId} v${versionOf(mp4s[0])}`, file: sheetFromMp4(mp4, outId), time: statSync(mp4).mtimeMs };
+    return { label: `${outId} v${versionOf(mp4s[0])} (frames from the MP4)`, file: sheetFromMp4(mp4, outId), time: statSync(mp4).mtimeMs };
   }
   return null;
 };
@@ -130,7 +130,7 @@ const filters = rows.map((r, i) => {
   const label = fontFile ? `,drawtext=fontfile='${fontFile}':text='${safe(r.label)}':x=16:y=18:fontsize=34:fontcolor=black` : "";
   return `[${i}:v]scale=${width}:-2,pad=iw:ih+70:0:70:white${label}[r${i}]`;
 });
-const output = join(outRoot, videoId, "stills", "compare.jpg");
+const output = join(outRoot, videoId, "compare.jpg");
 execFileSync("ffmpeg", [
   "-v", "error", "-y",
   ...rows.flatMap((r) => ["-i", r.file]),
@@ -141,6 +141,7 @@ execFileSync("ffmpeg", [
 if (work) rmSync(work, { recursive: true, force: true });
 
 console.log(`compare sheet ${output}`);
+console.log("  it shows frames of other videos: a local working file, never share or commit it");
 if (!fontFile) console.log("  no font found (fc-match), so the rows are unlabelled; they are in the order below");
 rows.forEach((r, i) => console.log(`  row ${i + 1}: ${r.label}`));
 if (rows.length === 1) {

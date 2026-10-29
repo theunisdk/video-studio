@@ -72,7 +72,7 @@ voice ───── one ElevenLabs clip per scene, with word timings    videos
 scenes ──── React + Three.js in Remotion, synced to the words   videos/<id>/Video.tsx
    │
    ▼
-storyboard ─ a still per scene, compared with recent videos      out/<id>/stills/contact.jpg, compare.jpg
+storyboard ─ a still per scene, compared with recent videos      out/<id>/stills/contact.jpg, out/<id>/compare.jpg
    │
    ▼
 render + QA ─ MP4, captions, script; never overwrites           out/<id>/<id>-v<N>.mp4
@@ -158,9 +158,10 @@ For a run of training videos, save a look as a series and reuse it:
 
 A series is a folder, `series/<name>/`, holding the tokens (`design.json`), the direction with its
 continuity rules (`design.md`), the voice (`series.json`), any series parts such as an intro card
-(`components/`) and the brand files (`assets/`). Each new episode copies the series into its own video
-folder, so it keeps rendering the same way even if the series changes later. Series carry brands, so
-`series/` is git-ignored like `videos/`. You can copy a series folder to another machine.
+(`components/`, taken from the video's own `components/` folder when its look is saved) and the brand
+files (`assets/`). Each new episode copies the series into its own video folder, so it keeps rendering
+the same way even if the series changes later. Series carry brands, so `series/` is git-ignored like `videos/`.
+You can copy a series folder to another machine.
 
 `series/demo/` is the one public example: a made-up training school, Lanternfield Academy. Try it:
 
@@ -180,8 +181,8 @@ pnpm voice <id> --placeholder              # silent clips, to build scenes befor
 pnpm render <id> --stills-only             # storyboard stills + out/<id>/stills/contact.jpg
 pnpm render <id> --preview                 # render with placeholder narration
 pnpm render <id>                           # out/<id>/<id>-v<N>.mp4 + .srt + .md, sources kept in videos/<id>/versions/
-pnpm compare <id>                          # storyboard beside recent videos: out/<id>/stills/compare.jpg
-pnpm series:export <id> <name>             # save a video's look as series/<name>/
+pnpm compare <id>                          # storyboard beside recent videos: out/<id>/compare.jpg (local only)
+pnpm series:export <id> <name>             # save a video's look as series/<name>/ (the video becomes episode one)
 pnpm series:use <name> <id>                # start a video in a series (copies its look into videos/<id>/)
 pnpm restore <id> v2                       # put an earlier version's sources back, to render that look again
 pnpm gallery                               # stills of every kit treatment: out/kit-gallery/

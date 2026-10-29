@@ -1,12 +1,12 @@
 // Checks a video's design block against the files and fonts it names, before anything is bundled.
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAvailableFonts } from "@remotion/google-fonts/index";
 import { designFiles, type Design, type FontToken } from "../src/video/design";
 import { hasWordTimings } from "../src/video/timeline";
 import type { VideoEntry } from "../src/video/registry";
 
-export type DesignCheck = { errors: string[]; notes: string[] };
+export type DesignCheck = { errors: string[]; warnings: string[]; notes: string[] };
 
 const googleWeights = async (family: string): Promise<number[] | null> => {
   const entry = getAvailableFonts().find((f) => f.fontFamily.toLowerCase() === family.toLowerCase());
@@ -32,12 +32,24 @@ export const checkFonts = async (d: Design): Promise<string[]> => {
   return errors;
 };
 
+const skipDirs = new Set(["versions", "node_modules", "audio", "research", "capture", "assets", "media"]);
+
+/** The .ts and .tsx files of a video folder, without its saved versions and media. */
+const sourceFiles = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? (skipDirs.has(e.name) ? [] : sourceFiles(join(dir, e.name))) : /\.tsx?$/.test(e.name) ? [join(dir, e.name)] : [],
+  );
+
 export const checkDesign = async (video: VideoEntry): Promise<DesignCheck> => {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const notes: string[] = [];
   const d = video.design;
-  if (!d) return { errors, notes };
+  if (!d) return { errors, warnings, notes };
   const dir = join("videos", video.videoId);
+  if (!sourceFiles(dir).some((f) => /<Designed[\s>]/.test(readFileSync(f, "utf8")))) {
+    warnings.push(`video.json has a design block, but no file in ${dir} mounts <Designed>, so the design has no effect`);
+  }
   for (const file of designFiles(d)) {
     if (!existsSync(join(dir, file))) errors.push(`design names ${file}, but ${join(dir, file)} does not exist`);
   }
@@ -46,5 +58,5 @@ export const checkDesign = async (video: VideoEntry): Promise<DesignCheck> => {
     const untimed = video.timeline.scenes.filter((s) => !hasWordTimings(s)).map((s) => s.id);
     if (untimed.length) notes.push(`caption "highlight" has no word timings for ${untimed.join(", ")}: those captions use its plain form`);
   }
-  return { errors, notes };
+  return { errors, warnings, notes };
 };

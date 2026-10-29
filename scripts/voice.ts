@@ -30,6 +30,7 @@ for (let i = 0; i < rest.length; i++) {
 
 const videoDir = join("videos", videoId);
 const video: VideoSpec = videoSchema.parse(JSON.parse(readFileSync(join(videoDir, "video.json"), "utf8")));
+if (video.id !== videoId) throw new Error(`${join(videoDir, "video.json")} has id "${video.id}"; set it to "${videoId}" first`);
 const unknown = [...adopt.keys()].filter((sceneId) => !video.scenes.some((s) => s.id === sceneId));
 if (unknown.length) throw new Error(`--adopt names scenes not in video.json: ${unknown.join(", ")}`);
 const audioDir = join(videoDir, "audio");

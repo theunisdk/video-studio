@@ -32,6 +32,7 @@ if (!video) {
 }
 
 const designCheck = await checkDesign(video);
+designCheck.warnings.forEach((w) => console.warn(`WARNING: ${w}`));
 designCheck.notes.forEach((n) => console.log(`note: ${n}`));
 if (designCheck.errors.length) throw new Error(`design in videos/${video.videoId}/video.json:\n  ${designCheck.errors.join("\n  ")}`);
 
