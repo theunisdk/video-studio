@@ -136,7 +136,10 @@ land in `videos/<id>/`. Skip look selection. Read the series `design.md` and kee
 section fixes (palette, fonts, title and caption treatment, intro and outro, transitions, voice, kicker
 convention, logo placement). Vary only what it allows. Note the series in `NOTES.md`.
 
-To save a look as a series (when the user asks, or for "same style as <id>"):
+To save a look as a series (when the user asks, or for "same style as <id>"). If `<id>` has no design block
+(the two public examples and videos made before design blocks), first write one into its `video.json` that
+matches how it looks, starting from the closest entry in the looks library (`neon-3d` for openclaw, `flat-2d`
+for getting-started), then export:
 
 ```bash
 pnpm series:export <id> <name>  # writes series/<name>/ from videos/<id>/
@@ -155,7 +158,8 @@ Then read `series/<name>/design.md` and tighten its generated Continuity section
 
 ## 4. Write `videos/<id>/video.json`
 
-Schema: `src/video/schema.ts`. Each scene has `id`, `narration`, and optional `kicker` (small label, e.g.
+Schema: `src/video/schema.ts`. After `pnpm series:use` the file already holds `id`, `series`, `design` and
+`voice`: edit it and keep those. Each scene has `id`, `narration`, and optional `kicker` (small label, e.g.
 "Step 2 · Upload the file"), `headline` (one line on screen), `minSeconds`, `title` and `transition`. Leave
 `kicker` and `headline` out when the title treatment is `none` or the scene speaks for itself. Copy `voice`
 from the OpenClaw example unless the user asks for another voice or the series sets one. Put the user's
@@ -250,7 +254,7 @@ Plain HTML, SVG and CSS in `Video.tsx` are fine and often the right tool for a l
 | Treatment | Holds |
 |---|---|
 | title `banner` | top 200px |
-| title `lowerThird` | bottom 330px (above the captions) |
+| title `lowerThird` | bottom 380px (above the captions; more with a larger `titleScale`). Keep its headline to two lines |
 | title `rail` | left 480px |
 | title `hero`, `kinetic` | the whole frame until `titleClear()`, then nothing |
 | caption `pill`, `highlight` | bottom 170px |

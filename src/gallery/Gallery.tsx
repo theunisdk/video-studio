@@ -2,7 +2,7 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import type { TimedScene } from "../video/timeline";
 import { Backdrop } from "../kit/backdrop";
 import { mix } from "../kit/color";
-import { Designed, surfaceStyle, useDesign, useMotion } from "../kit/design";
+import { Designed, surfaceStyle, useMotion, useRequiredDesign } from "../kit/design";
 import { entrance, motionRamp, motionSpring } from "../kit/motion";
 import { Captions } from "../kit/overlay";
 import { titleClear, Titles, useContentArea, useTitleTreatment } from "../kit/titles";
@@ -20,7 +20,7 @@ const manifest: CaptureManifest = {
 const Cards: React.FC<{ scene: TimedScene }> = ({ scene }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const d = useDesign()!;
+  const d = useRequiredDesign();
   const m = useMotion();
   const treatment = useTitleTreatment(scene);
   const area = useContentArea(scene);
@@ -44,7 +44,7 @@ const Cards: React.FC<{ scene: TimedScene }> = ({ scene }) => {
 
 /** A full-frame picture per scene, so a transition shows which scene is which. */
 const Panel: React.FC<{ scene: TimedScene }> = ({ scene }) => {
-  const d = useDesign()!;
+  const d = useRequiredDesign();
   const tint = scene.index % 2 ? mix(d.palette.bg, d.palette.accent, 0.35) : d.palette.bg;
   return (
     <AbsoluteFill style={{ background: tint, alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20 }}>
@@ -58,7 +58,7 @@ const Panel: React.FC<{ scene: TimedScene }> = ({ scene }) => {
 const MotionDemo: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const d = useDesign()!;
+  const d = useRequiredDesign();
   const m = useMotion();
   const span = 45;
   const plot = (f: (x: number) => number) =>

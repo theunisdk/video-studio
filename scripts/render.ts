@@ -6,13 +6,14 @@
 // then checks the MP4 with ffprobe. A passed render also keeps the sources that made it
 // (videos/<id>/versions/<name>/) and its contact sheet (out/<id>/contacts/<name>.jpg).
 import { execFileSync } from "node:child_process";
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { buildCues, toSrt } from "../src/video/captions";
 import { checkDesign } from "./design-check";
 import { loadVideos } from "./videos";
+import { copySources } from "./versions";
 
 const args = process.argv.slice(2);
 const videoId = args[0];
@@ -75,8 +76,10 @@ if (placeholders.length && !preview) {
 // Everything renders to temp names and is only moved into place after QA passes,
 // so out/<id>/ never mixes a new transcript with an old or failed video.
 const stem = preview ? `${video.id}-preview` : video.id;
-const version =
-  Math.max(0, ...readdirSync(outDir).map((f) => Number(new RegExp(`^${stem}-v(\\d+)\\.mp4$`).exec(f)?.[1] ?? 0))) + 1;
+// Saved sources count too, so a video folder copied without its out/ never reuses a version number.
+const savedDir = resolve("videos", video.videoId, "versions");
+const taken = [...readdirSync(outDir), ...(existsSync(savedDir) ? readdirSync(savedDir) : [])];
+const version = Math.max(0, ...taken.map((f) => Number(new RegExp(`^${stem}-v(\\d+)(?:\\.mp4)?$`).exec(f)?.[1] ?? 0))) + 1;
 const name = `${stem}-v${version}`;
 const output = join(outDir, `${name}.mp4`);
 if (existsSync(output)) throw new Error(`${output} already exists`);
@@ -145,16 +148,17 @@ if (!preview) writeFileSync(
   `# ${video.title}\n\n` + timeline.scenes.map((s) => `## ${s.kicker || s.headline || s.id}\n\n${s.narration}\n`).join("\n"),
 );
 
-// Keep what made this version, so any earlier look can be restored (pnpm restore) and rendered again.
-const sourceDir = resolve("videos", video.videoId);
-const snapshot = join(sourceDir, "versions", name);
-mkdirSync(snapshot, { recursive: true });
-for (const f of ["Video.tsx", "index.ts", "index.tsx", "video.json", "voice.json", "design.md", "NOTES.md"]) {
-  if (existsSync(join(sourceDir, f))) copyFileSync(join(sourceDir, f), join(snapshot, f));
-}
-if (existsSync(join(sourceDir, "components"))) cpSync(join(sourceDir, "components"), join(snapshot, "components"), { recursive: true });
-mkdirSync(join(outDir, "contacts"), { recursive: true });
-copyFileSync(join(stillDir, "contact.jpg"), join(outDir, "contacts", `${name}.jpg`));
 console.log(`rendered ${output} in ${((Date.now() - started) / 1000).toFixed(0)}s: ${duration.toFixed(2)}s ${v?.codec_name} ${v?.width}x${v?.height} ${a?.codec_name}`);
 console.log("QA passed: streams, size, fps and duration match the timeline");
-console.log(`sources saved in ${snapshot}`);
+
+// Keep what made this version, so any earlier look can be restored (pnpm restore) and rendered again.
+// The video is already in place, so a failure here is reported but does not fail the render.
+try {
+  const snapshot = join(savedDir, name);
+  copySources(resolve("videos", video.videoId), snapshot);
+  mkdirSync(join(outDir, "contacts"), { recursive: true });
+  copyFileSync(join(stillDir, "contact.jpg"), join(outDir, "contacts", `${name}.jpg`));
+  console.log(`sources saved in ${snapshot}`);
+} catch (e) {
+  console.error(`WARNING: ${name} rendered and passed QA, but its sources were not saved: ${(e as Error).message}`);
+}

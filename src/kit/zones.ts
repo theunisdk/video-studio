@@ -13,7 +13,7 @@ const none: Zone = { top: 0, right: 0, bottom: 0, left: 0 };
 export const titleZones: Record<TitleTreatment, Zone> = {
   banner: { ...none, top: 200 },
   hero: none,
-  lowerThird: { ...none, bottom: 330 },
+  lowerThird: { ...none, bottom: 380 },
   rail: { ...none, left: 480 },
   kinetic: none,
   none,
@@ -31,13 +31,26 @@ export const captionZones: Record<CaptionTreatment, Zone> = {
 export const logoZone = (logo?: { placement: string; height: number }): Zone =>
   !logo ? none : logo.placement.startsWith("top") ? { ...none, top: logo.height + 48 } : { ...none, bottom: logo.height + 40 };
 
-/** The rectangle left for scene content, with `margin` px of air inside it. */
+/**
+ * The rectangle left for scene content, with `margin` px of air inside it.
+ * `titleScale` (design.type.titleScale) grows the lower third's zone with its type.
+ */
 export const contentArea = (
   title: TitleTreatment,
   caption: CaptionTreatment,
-  { width = 1920, height = 1080, margin = 40, logo }: { width?: number; height?: number; margin?: number; logo?: { placement: string; height: number } } = {},
+  {
+    width = 1920,
+    height = 1080,
+    margin = 40,
+    logo,
+    titleScale = 1,
+  }: { width?: number; height?: number; margin?: number; logo?: { placement: string; height: number }; titleScale?: number } = {},
 ) => {
-  const t = titleZones[title];
+  const base = titleZones[title];
+  const t = {
+    ...base,
+    bottom: title === "lowerThird" ? 200 + (base.bottom - 200) * titleScale : base.bottom,
+  };
   const c = captionZones[caption];
   const l = logoZone(logo);
   const top = Math.max(t.top, c.top, l.top) + margin;

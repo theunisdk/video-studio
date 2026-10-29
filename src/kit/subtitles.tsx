@@ -5,7 +5,7 @@ import { buildWordCues } from "../video/captions";
 import type { CaptionTreatment } from "../video/design";
 import type { Timeline } from "../video/timeline";
 import { ramp } from "./anim";
-import { alpha } from "./color";
+import { alpha, readableOn } from "./color";
 import type { ResolvedDesign } from "./design";
 import type { Theme } from "./theme";
 
@@ -28,15 +28,15 @@ export const DesignedCaptions: React.FC<Props> = ({ timeline, treatment, d, t })
   const cue = cues.find((c) => frame >= c.startFrame && frame < c.endFrame);
   if (!cue) return null;
   const o = Math.min(ramp(frame, cue.startFrame, 4), 1 - ramp(frame, cue.endFrame - 4, 4));
-  const bg = d?.palette.bg ?? "#000000";
   const fg = d?.palette.fg ?? t.caption.fg;
+  const bg = d?.palette.bg ?? readableOn(fg, ["#000000", "#ffffff"]);
   const accent = d?.palette.accent ?? t.fg;
   const body = t.fonts.body;
   const weight = d?.weights.bodyBold ?? 700;
 
   if (treatment === "strip") {
     return (
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, opacity: o, background: alpha(d?.palette.surface ?? bg, 0.94), borderTop: `${Math.max(2, d?.shape.stroke ?? 2)}px solid ${accent}`, padding: "26px 200px 34px", textAlign: "center", font: `${d?.weights.body ?? 400} 38px/1.3 ${body}`, color: fg }}>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, opacity: o, background: d ? alpha(d.palette.surface, 0.94) : t.caption.bg, borderTop: `${Math.max(2, d?.shape.stroke ?? 2)}px solid ${accent}`, padding: "26px 200px 34px", textAlign: "center", font: `${d?.weights.body ?? 400} 38px/1.3 ${body}`, color: fg }}>
         {cue.text}
       </div>
     );

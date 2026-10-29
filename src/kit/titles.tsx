@@ -29,7 +29,7 @@ export const useTitleTreatment = (scene: TimedScene): TitleTreatment => {
 export const useContentArea = (scene: TimedScene, margin = 40) => {
   const d = useDesign();
   const { width, height } = useVideoConfig();
-  return contentArea(useTitleTreatment(scene), d?.caption ?? "pill", { width, height, margin, logo: d?.logo });
+  return contentArea(useTitleTreatment(scene), d?.caption ?? "pill", { width, height, margin, logo: d?.logo, titleScale: d?.type.titleScale });
 };
 
 /**

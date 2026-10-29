@@ -22,7 +22,8 @@ plus the `design` block in `video.json` (schema: `src/video/design.ts`).
    Set `look` to the file name you started from, to `"a+b"` for a mix, or to a short name of your own.
 4. Never copy another video's `Video.tsx`, palette or scene layout. Two videos that share a look
    should still look different.
-5. In the hand-off, name the look you chose and two alternates you considered, with one line each on why not.
+5. In the hand-off, name the look you chose and two alternates that would also fit, so the user can say
+   "make it editorial instead". Don't ask the user to choose.
 
 The sample `design` block at the end of each file parses against `designSchema` and its fonts exist.
 Treat it as one starting point. Every value in it is meant to change.

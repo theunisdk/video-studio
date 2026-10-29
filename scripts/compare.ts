@@ -25,13 +25,15 @@ const sourceOf = (outId: string): string | null => {
   return dirs.sort((a, b) => b.length - a.length)[0] ?? null;
 };
 
+/** The series a video belongs to; a video.json that can't be read is an error, not "no series". */
 const seriesOf = (outId: string): string | null => {
   const src = sourceOf(outId);
   if (!src) return null;
+  const file = join("videos", src, "video.json");
   try {
-    return (JSON.parse(readFileSync(join("videos", src, "video.json"), "utf8")) as { series?: string }).series ?? null;
-  } catch {
-    return null;
+    return (JSON.parse(readFileSync(file, "utf8")) as { series?: string }).series ?? null;
+  } catch (e) {
+    throw new Error(`${file} can't be read: ${(e as Error).message}`);
   }
 };
 
@@ -78,8 +80,10 @@ const latestSheet = (outId: string, { skipStoryboard = false } = {}): Sheet | nu
 };
 
 const series = seriesOf(videoId);
+const self = sourceOf(videoId) ?? videoId;
+// Other videos only: this video's own variants (out/<id>-flat) are not something to differ from.
 const others = readdirSync(outRoot, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && d.name !== videoId && !d.name.startsWith("kit-"))
+  .filter((d) => d.isDirectory() && d.name !== videoId && !d.name.startsWith("kit-") && sourceOf(d.name) !== self)
   .map((d) => d.name);
 
 let refs: Sheet[] = [];
@@ -92,11 +96,15 @@ if (series) {
   mode = "differ";
   const earlier = latestSheet(videoId, { skipStoryboard: true });
   if (earlier) refs.push({ ...earlier, label: `${earlier.label} (this video's earlier look)` });
+  // One entry per series, so three episodes of one look don't fill every slot.
+  const seen = new Set<string>();
   const recent = others
-    .map((o) => latestSheet(o))
-    .filter((s): s is Sheet => !!s)
-    .sort((a, b) => b.time - a.time)
-    .slice(0, 3);
+    .map((o) => ({ sheet: latestSheet(o), series: seriesOf(o) }))
+    .filter((r): r is { sheet: Sheet; series: string | null } => !!r.sheet)
+    .sort((a, b) => b.sheet.time - a.sheet.time)
+    .filter((r) => !r.series || (!seen.has(r.series) && !!seen.add(r.series)))
+    .slice(0, 3)
+    .map((r) => r.sheet);
   refs.push(...recent);
 }
 
@@ -125,6 +133,7 @@ execFileSync("ffmpeg", [
 if (work) rmSync(work, { recursive: true, force: true });
 
 console.log(`compare sheet ${output}`);
+if (!fontFile) console.log("  no font found (fc-match), so the rows are unlabelled; they are in the order below");
 rows.forEach((r, i) => console.log(`  row ${i + 1}: ${r.label}`));
 if (rows.length === 1) {
   console.log(mode === "continuity" ? `  no earlier episode of series ${series} has been rendered yet` : "  nothing else has been rendered yet, so there is nothing to compare against");

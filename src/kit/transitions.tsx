@@ -53,7 +53,10 @@ export const transitionStyle = (spec: TransitionSpec, p: number, incoming: boole
 
 /** The transition into `scene`: its own override, else `fallback`. A "cut" has no overlap. */
 const into = (scene: TimedScene, fallback: TransitionSpec): TransitionSpec => scene.transition ?? fallback;
-const overlap = (spec: TransitionSpec) => (spec.kind === "cut" ? 0 : spec.frames);
+
+/** Overlap at the edge into scenes[i], at most half of either neighbour so a short scene still gets in and out. */
+const overlapAt = (scenes: TimedScene[], i: number, spec: TransitionSpec) =>
+  spec.kind === "cut" ? 0 : Math.min(spec.frames, Math.floor(scenes[i - 1].durationInFrames / 2), Math.floor(scenes[i].durationInFrames / 2));
 
 /**
  * Renders each scene only while it is on screen and runs the transition between neighbours.
@@ -80,16 +83,16 @@ export const SceneTrack: React.FC<{
         const inSpec = i > 0 ? into(scene, fallback) : null;
         const next = scenes[i + 1];
         const outSpec = next ? into(next, fallback) : null;
-        const pre = inSpec ? Math.floor(overlap(inSpec) / 2) : 0;
-        const post = outSpec ? Math.ceil(overlap(outSpec) / 2) : 0;
-        const startAt = scene.from - pre;
-        const endAt = scene.from + scene.durationInFrames + post;
+        const inFrames = inSpec ? overlapAt(scenes, i, inSpec) : 0;
+        const outFrames = outSpec ? overlapAt(scenes, i + 1, outSpec) : 0;
+        const startAt = scene.from - Math.floor(inFrames / 2);
+        const endAt = scene.from + scene.durationInFrames + Math.ceil(outFrames / 2);
         if (frame < startAt || frame >= endAt) return null;
         let style: React.CSSProperties = {};
-        if (inSpec && overlap(inSpec) > 0 && frame < scene.from + Math.ceil(overlap(inSpec) / 2)) {
-          style = transitionStyle(inSpec, motionRamp(m, frame, startAt, overlap(inSpec)), true, opaque);
-        } else if (next && outSpec && overlap(outSpec) > 0 && frame >= next.from - Math.floor(overlap(outSpec) / 2)) {
-          style = transitionStyle(outSpec, motionRamp(m, frame, next.from - Math.floor(overlap(outSpec) / 2), overlap(outSpec)), false, opaque);
+        if (inSpec && inFrames > 0 && frame < startAt + inFrames) {
+          style = transitionStyle(inSpec, motionRamp(m, frame, startAt, inFrames), true, opaque);
+        } else if (next && outSpec && outFrames > 0 && frame >= next.from - Math.floor(outFrames / 2)) {
+          style = transitionStyle(outSpec, motionRamp(m, frame, next.from - Math.floor(outFrames / 2), outFrames), false, opaque);
         }
         return (
           <AbsoluteFill key={scene.id} style={style}>

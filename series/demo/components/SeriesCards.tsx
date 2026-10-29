@@ -1,7 +1,7 @@
 // The demo series' intro and outro: every episode opens on the academy card and closes on the "next" card.
 import { AbsoluteFill, Img, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { TimedScene } from "../../../src/video/timeline";
-import { useDesign, useMotion } from "../../../src/kit/design";
+import { useMotion, useRequiredDesign } from "../../../src/kit/design";
 import { entrance, exit } from "../../../src/kit/motion";
 
 const ACADEMY = "Lanternfield Academy";
@@ -12,7 +12,7 @@ export const introEnd = (scene: TimedScene, fps: number, seconds = 2.4) => scene
 export const IntroCard: React.FC<{ scene: TimedScene; episode: number; title: string }> = ({ scene, episode, title }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const d = useDesign()!;
+  const d = useRequiredDesign();
   const m = useMotion();
   const end = introEnd(scene, fps);
   if (frame >= end) return null;
@@ -33,7 +33,7 @@ export const IntroCard: React.FC<{ scene: TimedScene; episode: number; title: st
 export const OutroCard: React.FC<{ scene: TimedScene; next?: string; seconds?: number }> = ({ scene, next, seconds = 2 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const d = useDesign()!;
+  const d = useRequiredDesign();
   const m = useMotion();
   const start = scene.from + scene.durationInFrames - Math.round(seconds * fps);
   if (frame < start) return null;

@@ -1,6 +1,6 @@
 // A video's design tokens in React: <Designed> loads its fonts and provides the theme, and kit parts
 // read the tokens with useDesign(). Without a <Designed> (or with no design), everything keeps its defaults.
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { cancelRender, continueRender, delayRender, staticFile } from "remotion";
 import type { Design, FontToken } from "../video/design";
 import { alpha, isDark, mix, readableOn } from "./color";
@@ -118,53 +118,64 @@ export const DesignContext = createContext<ResolvedDesign | null>(null);
 /** The current video's resolved design, or null outside a <Designed> (legacy look). */
 export const useDesign = () => useContext(DesignContext);
 
+/** The current design, for parts that only work inside a <Designed> with a design. */
+export const useRequiredDesign = (): ResolvedDesign => {
+  const d = useDesign();
+  if (!d) throw new Error("This component needs a <Designed> with a design around it");
+  return d;
+};
+
 /** The design's motion preset; "calm" when there is no design. */
 export const useMotion = (): MotionPreset => useDesign()?.motionPreset ?? motion.calm;
 
-// One load per font across every <Designed> in the bundle (the gallery mounts many).
+// One load per font across every <Designed> in the bundle (the gallery mounts many). A failed load is
+// forgotten, so the next attempt tries again instead of repeating a stale error.
 const fontLoads = new Map<string, Promise<void>>();
-
-const loadGoogle = (family: string, weights: number[]): Promise<void> => {
-  const ws = [...new Set(weights)].sort((a, b) => a - b);
-  const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@${ws.join(";")}&display=block`;
-  const key = `google:${href}`;
+const once = (key: string, load: () => Promise<void>): Promise<void> => {
   if (!fontLoads.has(key)) {
     fontLoads.set(
       key,
-      new Promise<void>((resolve, reject) => {
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = href;
-        link.onload = () => resolve();
-        link.onerror = () => reject(new Error(`Google Fonts has no "${family}" with weights ${ws.join(", ")}`));
-        document.head.appendChild(link);
-      }).then(async () => {
-        const faces = await Promise.all(ws.map((w) => document.fonts.load(`${w} 40px "${family}"`)));
-        if (faces.some((f) => f.length === 0)) throw new Error(`Font "${family}" loaded no faces`);
+      load().catch((e: Error) => {
+        fontLoads.delete(key);
+        throw e;
       }),
     );
   }
   return fontLoads.get(key)!;
 };
 
+const loadGoogle = (family: string, weights: number[]): Promise<void> => {
+  const ws = [...new Set(weights)].sort((a, b) => a - b);
+  const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@${ws.join(";")}&display=block`;
+  return once(`google:${href}`, () =>
+    new Promise<void>((resolve, reject) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.onload = () => resolve();
+      link.onerror = () => reject(new Error(`Google Fonts has no "${family}" with weights ${ws.join(", ")}`));
+      document.head.appendChild(link);
+    }).then(async () => {
+      // Every subset, not just the one a test string would pick, so no glyph falls back mid-render.
+      const faces = [...document.fonts].filter((f) => f.family.replace(/["']/g, "") === family);
+      if (faces.length === 0) throw new Error(`Font "${family}" loaded no faces`);
+      await Promise.all(faces.map((f) => f.load()));
+    }),
+  );
+};
+
 const loadLocal = (videoId: string, token: Extract<FontToken, { files: unknown }>): Promise<void> =>
   Promise.all(
     token.files.map((f) => {
       const url = staticFile(`${videoId}/${f.src}`);
-      const key = `local:${token.family}:${url}:${f.weight}:${f.style}`;
-      if (!fontLoads.has(key)) {
-        const face = new FontFace(token.family, `url("${url}")`, { weight: String(f.weight), style: f.style });
-        fontLoads.set(
-          key,
-          face.load().then(
-            (loaded) => void document.fonts.add(loaded),
-            (e: Error) => {
-              throw new Error(`Font file ${videoId}/${f.src} failed to load: ${e.message}`);
-            },
-          ),
-        );
-      }
-      return fontLoads.get(key)!;
+      return once(`local:${token.family}:${url}:${f.weight}:${f.style}`, () =>
+        new FontFace(token.family, `url("${url}")`, { weight: String(f.weight), style: f.style }).load().then(
+          (loaded) => void document.fonts.add(loaded),
+          (e: Error) => {
+            throw new Error(`Font file ${videoId}/${f.src} failed to load: ${e.message}`);
+          },
+        ),
+      );
     }),
   ).then(() => undefined);
 
@@ -181,14 +192,23 @@ const loadFonts = (design: Design, videoId: string): Promise<void> =>
  */
 export const Designed: React.FC<{ videoId: string; design?: Design; children: React.ReactNode }> = ({ videoId, design, children }) => {
   const resolved = useMemo(() => (design ? resolveDesign(design, videoId) : null), [design, videoId]);
-  const [handle] = useState(() => (design ? delayRender(`Loading fonts for ${videoId}`) : null));
+  // The first render must already wait, so its handle is taken during render; a later design (a Studio
+  // prop change) takes its own in the effect.
+  const [first] = useState(() => (design ? delayRender(`Loading fonts for ${videoId}`) : null));
+  const pending = useRef(first);
   useEffect(() => {
-    if (!design || handle === null) return;
+    if (!design) return;
+    const handle = pending.current ?? delayRender(`Loading fonts for ${videoId}`);
+    pending.current = null;
+    let live = true;
     loadFonts(design, videoId).then(
       () => continueRender(handle),
-      (e: Error) => cancelRender(e),
+      (e: Error) => (live ? cancelRender(e) : continueRender(handle)),
     );
-  }, [design, videoId, handle]);
+    return () => {
+      live = false;
+    };
+  }, [design, videoId]);
   if (!resolved) return <>{children}</>;
   return (
     <DesignContext.Provider value={resolved}>

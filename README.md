@@ -130,8 +130,9 @@ addresses) before you share it. Use demo data, or blur it.
 
 ## Every video gets its own look
 
-Claude designs each video from its subject, audience, purpose, tone and brand. For a website it reads the
-site's colours, fonts and logo from the capture. It writes the direction down in `videos/<id>/design.md`
+Claude designs each video from its subject, audience, purpose, tone and brand. For a website it takes the
+site's colours, fonts and logo from the capture (`research/brand.json` when the capture saved one, otherwise
+the screenshots). It writes the direction down in `videos/<id>/design.md`
 and the tokens in a `design` block in `video.json`, then builds the scenes from them: palette, fonts
 (Google Fonts or your own font files), shapes, background, title and caption treatments, motion and
 transitions.

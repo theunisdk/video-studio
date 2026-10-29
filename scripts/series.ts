@@ -3,7 +3,7 @@
 //   pnpm series:use <name> <videoId>      copy series/<name>/ into videos/<videoId>/ for a new episode
 // An episode copies the series (tokens, components, brand files) rather than pointing at it,
 // so it renders the same way forever and works when its folder is copied on its own.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { designFiles, designSchema, type Design } from "../src/video/design";
 
@@ -67,25 +67,34 @@ const exportSeries = (videoId: string, name: string) => {
   const design = designSchema.parse(spec.design);
   const dest = join("series", name);
   if (existsSync(dest)) throw new Error(`${dest} already exists; pick another name, or delete it first if it should be replaced`);
-  mkdirSync(join(dest, "assets"), { recursive: true });
 
+  // Check everything first, then build in a temp folder, so a failure never leaves a half-written series.
   const moved = new Map<string, string>();
   for (const file of designFiles(design)) {
     if (!existsSync(join(src, file))) throw new Error(`design names ${file}, but ${join(src, file)} does not exist`);
     const target = file.startsWith("assets/") ? file : `assets/${basename(file)}`;
     if ([...moved.values()].includes(target)) throw new Error(`two design files would both be saved as ${target}; rename one`);
-    copyInto(join(src, file), join(dest, target));
     moved.set(file, target);
   }
   const components = existsSync(join(src, "components")) ? readdirSync(join(src, "components")).filter((f) => /\.tsx?$/.test(f)) : [];
-  for (const f of components) copyInto(join(src, "components", f), join(dest, "components", f));
-
+  const work = `${dest}.tmp-${process.pid}`;
+  rmSync(work, { recursive: true, force: true });
   const meta: SeriesMeta = { name, exportedFrom: videoId, exportedAt: new Date().toISOString(), voice: spec.voice };
-  writeJson(join(dest, "design.json"), remapFiles(design, (p) => moved.get(p) ?? p));
-  writeJson(join(dest, "series.json"), meta);
-  const kickers = ((spec.scenes as { kicker?: string }[] | undefined) ?? []).map((s) => s.kicker).filter((k): k is string => !!k);
-  const direction = existsSync(join(src, "design.md")) ? readFileSync(join(src, "design.md"), "utf8").trimEnd() + "\n" : `# ${name}\n`;
-  writeFileSync(join(dest, "design.md"), /^## Continuity/m.test(direction) ? direction : direction + continuity(design, meta, kickers));
+  try {
+    mkdirSync(join(work, "assets"), { recursive: true });
+    for (const [file, target] of moved) copyInto(join(src, file), join(work, target));
+    for (const f of components) copyInto(join(src, "components", f), join(work, "components", f));
+
+    writeJson(join(work, "design.json"), remapFiles(design, (p) => moved.get(p) ?? p));
+    writeJson(join(work, "series.json"), meta);
+    const kickers = ((spec.scenes as { kicker?: string }[] | undefined) ?? []).map((s) => s.kicker).filter((k): k is string => !!k);
+    const direction = existsSync(join(src, "design.md")) ? readFileSync(join(src, "design.md"), "utf8").trimEnd() + "\n" : `# ${name}\n`;
+    writeFileSync(join(work, "design.md"), /^## Continuity/m.test(direction) ? direction : direction + continuity(design, meta, kickers));
+    renameSync(work, dest);
+  } catch (e) {
+    rmSync(work, { recursive: true, force: true });
+    throw e;
+  }
 
   console.log(`series ${dest}`);
   console.log(`  design.json, series.json, design.md${components.length ? `, components/ (${components.join(", ")})` : ""}${moved.size ? `, assets/ (${[...moved.values()].map((p) => basename(p)).join(", ")})` : ""}`);
@@ -98,6 +107,13 @@ const useSeries = (name: string, videoId: string) => {
   const design = designSchema.parse(readJson(join(from, "design.json")));
   const meta = existsSync(join(from, "series.json")) ? (readJson(join(from, "series.json")) as SeriesMeta) : null;
   const dest = join("videos", videoId);
+  const specPath = join(dest, "video.json");
+  const spec = existsSync(specPath) ? readJson(specPath) : { id: videoId };
+  const seriesDesign = readJson(join(from, "design.json"));
+  if (spec.series && spec.series !== name) throw new Error(`${specPath} already belongs to series "${String(spec.series)}"`);
+  if (spec.design && JSON.stringify(designSchema.parse(spec.design)) !== JSON.stringify(design)) {
+    throw new Error(`${specPath} already has a different design block; remove it first if this video should take series ${name}'s look`);
+  }
   mkdirSync(dest, { recursive: true });
 
   const copied: string[] = [];
@@ -112,11 +128,8 @@ const useSeries = (name: string, videoId: string) => {
   }
   if (existsSync(join(from, "design.md")) && copyInto(join(from, "design.md"), join(dest, "design.md")) === "copied") copied.push("design.md");
 
-  const specPath = join(dest, "video.json");
-  const spec = existsSync(specPath) ? readJson(specPath) : { id: videoId };
-  if (spec.series && spec.series !== name) throw new Error(`${specPath} already belongs to series "${String(spec.series)}"`);
   spec.series = name;
-  spec.design = readJson(join(from, "design.json"));
+  spec.design = seriesDesign;
   if (meta?.voice && !spec.voice) spec.voice = meta.voice;
   writeJson(specPath, spec);
 
