@@ -208,8 +208,8 @@ and `lang` (an espeak language code, normally left out). A wrong name fails with
 
 **One-off `--kokoro`** records the Kokoro voice in `voice.json` as `override`, so previews and renders work
 without touching video.json, and `pnpm render` warns that the video is not in video.json's voice. Run plain
-`pnpm voice <id>` to go back: the ElevenLabs clips are still in `audio/`, so that run is all `cached` and
-needs no key. Kokoro and ElevenLabs clips never share a cache key.
+`pnpm voice <id>` to go back. Scenes voiced with ElevenLabs before are still in `audio/`, so they come back
+`cached` with no key; any others need the key. Kokoro and ElevenLabs clips never share a cache key.
 
 `pnpm voice` writes `videos/<id>/voice.json` with each clip's duration and character timings. Real audio
 durations set each scene's length; never speed speech up to fit. Placeholder clips let you build and
@@ -228,7 +228,7 @@ copy `voice.json` itself: a copied one names the source in `"videoId"`, and the 
 
 **Word timings.** ElevenLabs and Kokoro clips carry character timings, so effects can land on an exact word.
 Kokoro times each sound; `pnpm voice` lines those up with the words of the narration (it prints
-`timing: exact`). If they cannot be lined up, the clip gets none and the line says why. Adopted or
+`timing: exact`). If they cannot be lined up, the clip gets none, and the run that voiced it says why. Adopted or
 placeholder clips have none (`voice.json` prints `timing: estimated`). Without them:
 - `highlight` captions fall back to the plain form of the same treatment (`pnpm render` prints a note);
 - `phraseFrame` estimates from the text, so a sync is right to the phrase, not the word;

@@ -75,7 +75,7 @@ if (placeholders.length && !preview) {
 }
 console.log(`voice: ${timeline.voice.label}`);
 if (timeline.voice.override) {
-  console.warn(`WARNING: narrated by the one-off ${timeline.voice.provider} voice, not video.json's. To switch back: pnpm voice ${video.videoId}`);
+  console.warn(`WARNING: narrated by the one-off ${timeline.voice.provider} voice, not video.json's. To use video.json's voice: pnpm voice ${video.videoId}`);
 }
 
 // Everything renders to temp names and is only moved into place after QA passes,

@@ -34,6 +34,7 @@ for (let i = 0; i < rest.length; i++) {
   }
   if (rest[i] === "--kokoro" || rest[i].startsWith("--kokoro=")) {
     kokoroFlag = rest[i].slice("--kokoro=".length);
+    if (rest[i] === "--kokoro=") throw new Error("--kokoro= needs a voice name, e.g. --kokoro=bm_george");
     continue;
   }
   if (rest[i] !== "--adopt") throw new Error(`Unknown argument ${rest[i]}`);
@@ -53,7 +54,10 @@ if (unknown.length) throw new Error(`--adopt names scenes not in video.json: ${u
 const audioDir = join(videoDir, "audio");
 mkdirSync(audioDir, { recursive: true });
 
-const flagged = kokoroFlag === null ? null : kokoroVoiceSchema.parse({ provider: "kokoro", ...(kokoroFlag ? { voice: kokoroFlag } : {}) });
+const flagged =
+  kokoroFlag === null
+    ? null
+    : kokoroVoiceSchema.parse({ ...(video.voice.provider === "kokoro" ? video.voice : { provider: "kokoro" }), ...(kokoroFlag ? { voice: kokoroFlag } : {}) });
 const override = flagged && voiceFingerprint(flagged) !== voiceFingerprint(video.voice) ? flagged : null;
 const voice: Voice = override ?? video.voice;
 console.log(`voice: ${voiceLabel(voice)}${override ? ` (one-off --kokoro; video.json's voice is ${video.voice.provider})` : ""}`);
@@ -153,6 +157,7 @@ for (const scene of video.scenes) {
     const clip = await synthesize(scene.narration);
     storeClip(audioPath, (tmp) => writeFileSync(tmp, clip.audio));
     if (clip.alignment) writeFileSync(alignmentPath, JSON.stringify(clip.alignment));
+    else rmSync(alignmentPath, { force: true });
     note = "note" in clip ? clip.note : null;
     status = "synthesised";
   }

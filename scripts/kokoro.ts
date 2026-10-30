@@ -52,7 +52,14 @@ export const kokoroSynthesize = (voice: KokoroVoice, texts: string[]): Map<strin
       }
       throw new Error(`Kokoro failed (scripts/kokoro.py); its error is above`);
     }
-    const result = JSON.parse(stdout.toString()) as { items: { words: [number, number][] | null; note: string | null }[] };
+    let result: { items: { words: [number, number][] | null; note: string | null }[] };
+    try {
+      result = JSON.parse(stdout.toString());
+    } catch {
+      throw new Error(`Kokoro returned malformed output: ${stdout.toString().slice(0, 300)}`);
+    }
+    const bad = result.items?.length !== texts.length || result.items.some((r, i) => r.words !== null && r.words.length !== words[i].length);
+    if (bad) throw new Error("Kokoro returned malformed output: its clips or word timings do not match the request");
     return new Map(
       texts.map((text, i) => {
         const mp3 = join(dir, `${i}.mp3`);

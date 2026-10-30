@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 from kokoro_onnx import Kokoro
 
+# Changing the model or the kokoro-onnx pin changes the voice: change KOKORO_MODEL in src/video/schema.ts with it.
 RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1"
 FILES = {
     "kokoro-v1.0.onnx": "beb0d1848dee9a49da392cc3df26958d46cfa35d321edf434f52949153f0df3a",
@@ -59,7 +60,7 @@ def fetch(name: str, sha256: str, folder: Path) -> Path:
                 shown = pct
     if digest.hexdigest() != sha256:
         part.unlink()
-        raise SystemExit(f"{name} failed its checksum; delete {folder} and run again")
+        raise SystemExit(f"{name} failed its checksum (download corrupted or changed upstream); run again")
     part.rename(path)
     return path
 
@@ -79,8 +80,10 @@ def word_timings(kokoro: Kokoro, words: list[str], lang: str, spoken, seconds: f
     alone_by_word = [core(kokoro.tokenizer.phonemize(w, lang)) for w in words]
     alone = "".join(alone_by_word)
     owner = [i for i, p in enumerate(alone_by_word) for _ in p]
-    if not said or not alone:
+    if not said:
         return None, "the model returned no phoneme timings"
+    if not alone:
+        return None, "espeak found nothing to pronounce in the words"
     matcher = difflib.SequenceMatcher(None, heard, alone, autojunk=False)
     blocks = matcher.get_matching_blocks()
     matched = sum(b.size for b in blocks)
