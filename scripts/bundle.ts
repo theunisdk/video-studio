@@ -23,9 +23,12 @@ export const removeBundle = (dir: string) => {
 export const removeOnExit = (dir: string) => {
   if (!owned.size) {
     process.once("exit", () => owned.forEach(removeBundle));
-    // Without a listener a signal ends the process without an exit event.
+    // Without a listener a signal ends the process without an exit event. Exit only when no one else
+    // listens: Remotion's open browser handles these itself, and then the render fails through its own path.
     for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]] as const) {
-      process.once(signal, () => process.exit(code));
+      process.on(signal, () => {
+        if (process.listenerCount(signal) === 1) process.exit(code);
+      });
     }
   }
   owned.add(dir);

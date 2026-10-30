@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -21,7 +21,7 @@ const run = (how: string) => {
   return { code: child.status, dir: child.stdout.trim(), stderr: child.stderr };
 };
 
-for (const [how, code] of [["done", 0], ["exit1", 1], ["sigint", 130]] as const) {
+for (const [how, code] of [["done", 0], ["exit1", 1], ["sigint", 130], ["sigterm", 143], ["sigterm-handled", 1]] as const) {
   test(`removes the bundle when the render ends with ${how}`, () => {
     const r = run(how);
     assert.equal(r.code, code, r.stderr);
@@ -37,6 +37,13 @@ test("removes the bundle after a throw and still reports the error", () => {
   assert.equal(existsSync(r.dir), false);
 });
 
+test("removes a real bundle when the render throws after bundling", () => {
+  const r = run("real");
+  assert.notEqual(r.code, 0);
+  assert.match(r.stderr, /render exploded/);
+  assert.deepEqual(readdirSync(root).filter((f) => f.startsWith("remotion-webpack-bundle-")), []);
+});
+
 test("leaves other sessions' bundles alone", () => {
   const other = join(root, "remotion-webpack-bundle-other");
   mkdirSync(other);
@@ -45,7 +52,8 @@ test("leaves other sessions' bundles alone", () => {
   assert.equal(existsSync(other), true);
 });
 
-test("a bundle that cannot be removed warns but keeps the render's exit code", () => {
+// Root can unlink from a read-only dir, so the removal would not fail.
+test("a bundle that cannot be removed warns but keeps the render's exit code", { skip: process.getuid?.() === 0 }, () => {
   const r = run("locked");
   assert.equal(r.code, 0);
   assert.match(r.stderr, /WARNING: could not remove the Remotion bundle/);
@@ -57,9 +65,10 @@ test("refuses to remove a dir that is not a bundle in the temp dir", (t) => {
   const nested = join(root, "remotion-webpack-bundle-nested");
   mkdirSync(nested);
   t.after(() => rmSync(keep, { recursive: true, force: true }));
-  t.mock.method(console, "error", () => {});
+  const warn = t.mock.method(console, "error", () => {});
   removeBundle(keep);
   removeBundle(nested);
   assert.equal(existsSync(keep), true);
   assert.equal(existsSync(nested), true);
+  assert.deepEqual(warn.mock.calls.map((c) => /^WARNING: left .* in place/.test(String(c.arguments[0]))), [true, true]);
 });
