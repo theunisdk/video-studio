@@ -1,12 +1,12 @@
 // Kokoro-82M narration in Node, CPU only: onnxruntime-node runs the timestamped ONNX export of the model, and
 // phonemizer (espeak-ng in WebAssembly) turns the narration into phonemes. Both install on first use into the
 // Kokoro cache from the lockfile in scripts/kokoro-engine/, so a plain `pnpm install` never pulls them in.
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { KOKORO_MODEL, kokoroLang, type Alignment, type KokoroVoice } from "../src/video/schema";
@@ -59,7 +59,7 @@ type Phonemizer = {
 };
 
 const cacheDir = () =>
-  process.env.KOKORO_CACHE_DIR || join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "video-studio", "kokoro");
+  resolve(process.env.KOKORO_CACHE_DIR || join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "video-studio", "kokoro"));
 
 const engineFile = (name: string) => readFileSync(join(ENGINE, name));
 
@@ -79,13 +79,13 @@ const loadEngine = (): { ort: Ort; phonemizer: Phonemizer } => {
     rmSync(tmp, { recursive: true, force: true });
     mkdirSync(tmp, { recursive: true });
     for (const name of lock) copyFileSync(join(ENGINE, name), join(tmp, name));
+    // Hoisted, because the folder is renamed once installed and Windows junctions hold absolute paths.
+    const args = ["install", "--frozen-lockfile", "--prod", "--ignore-scripts", "--ignore-workspace", "--config.node-linker=hoisted"];
+    const options = { cwd: tmp, stdio: ["ignore", 2, 2] as ("ignore" | number)[] };
     try {
-      execFileSync("pnpm", ["install", "--frozen-lockfile", "--prod", "--ignore-scripts"], {
-        cwd: tmp,
-        stdio: ["ignore", 2, 2],
-        // Windows runs pnpm through pnpm.cmd, which needs a shell.
-        shell: process.platform === "win32",
-      });
+      // Windows runs pnpm through pnpm.cmd, which needs a shell.
+      if (process.platform === "win32") execSync(`pnpm ${args.join(" ")}`, options);
+      else execFileSync("pnpm", args, options);
     } catch (e) {
       rmSync(tmp, { recursive: true, force: true });
       if ((e as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Kokoro installs its engine with pnpm, which is not on PATH");
@@ -114,7 +114,9 @@ const fetchFile = async (name: string, sha256: string): Promise<string> => {
   if (existsSync(path)) return path;
   mkdirSync(join(path, ".."), { recursive: true });
   const part = `${path}.${process.pid}.part`;
-  const res = await fetch(`${HUB}/${name}`);
+  const res = await fetch(`${HUB}/${name}`).catch((e: Error) => {
+    throw new Error(`Downloading ${name} failed: ${(e.cause as Error | undefined)?.message ?? e.message}`);
+  });
   if (!res.ok || !res.body) throw new Error(`Downloading ${name} failed: HTTP ${res.status}`);
   const total = Number(res.headers.get("content-length")) || 0;
   if (total > 10 << 20) console.error(`Downloading ${name} to ${cacheDir()} (first run only)`);
@@ -143,7 +145,12 @@ const fetchFile = async (name: string, sha256: string): Promise<string> => {
     rmSync(part, { force: true });
     throw new Error(`${name} failed its checksum; run again, and if it fails again the file changed upstream`);
   }
-  renameSync(part, path);
+  try {
+    renameSync(part, path);
+  } catch (e) {
+    rmSync(part, { force: true });
+    if (!existsSync(path)) throw e;
+  }
   return path;
 };
 
@@ -168,7 +175,11 @@ const pronounce = async (phonemizer: Phonemizer, text: string, lang: string): Pr
 };
 
 const phonemesOf = async (phonemizer: Phonemizer, text: string, lang: string, vocab: Record<string, number>): Promise<string> => {
-  const normal = text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+  const normal = text
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/(?<=\d),(?=\d{3}\b)/g, "")
+    .replace(/(?<=\d)\.(?=\d)/g, " point ");
   let out = "";
   let at = 0;
   for (const m of normal.matchAll(PUNCTUATION)) {
@@ -228,7 +239,7 @@ const wordSpans = (
   const heard = spoken.filter(isCore);
   const aloneByWord = alone.map((p) => [...p].filter(isCore));
   const owner = aloneByWord.flatMap((p, i) => p.map(() => i));
-  if (!said.length) return { spans: null, note: "the model returned no phoneme timings" };
+  if (!said.length) return { spans: null, note: "the narration has no sounds to time" };
   if (!owner.length) return { spans: null, note: "espeak found nothing to pronounce in the words" };
   const pairs = commonSubsequence(heard, aloneByWord.flat());
   if (pairs.length < 0.6 * owner.length) return { spans: null, note: `only ${pairs.length} of ${owner.length} phonemes lined up with the words` };
