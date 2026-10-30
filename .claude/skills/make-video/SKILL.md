@@ -250,7 +250,7 @@ loading). The timeline plays the clip up to the cut, holds the pause and plays t
 scene's speech, not `audioFrom + audioSeconds * fps`, which ignores the pause. When no gap is found the run
 prints `heading pause: NONE` and the scene plays without a pause. `pnpm render` warns about that, and about any cut
 it is unsure of (no silence at the gap, or no word timings); listen to those scenes. `spokenHeading` must be whole
-words, and a scene's `headingPauseSeconds` needs one. If no gap is found, rephrase the heading as a
+words followed by a space ("Answer by message," before " when" is fine, "message—when" is not), and a scene's `headingPauseSeconds` needs one. If no gap is found, rephrase the heading as a
 sentence of its own ("Answer by message." rather than "Answer by message, when...") and voice it again.
 
 **Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with
