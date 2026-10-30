@@ -62,8 +62,11 @@ export const videoSchema = z.object({
     .max(40)
     .superRefine((scenes, ctx) =>
       scenes.forEach((s, i) => {
-        if (s.spokenHeading && (!s.narration.startsWith(s.spokenHeading) || s.narration.length === s.spokenHeading.length)) {
-          ctx.addIssue({ code: "custom", path: [i, "spokenHeading"], message: `scene "${s.id}": spokenHeading must be the start of its narration, with more narration after it` });
+        if (s.spokenHeading && !(s.narration.startsWith(s.spokenHeading) && /\s/.test(s.narration[s.spokenHeading.length] ?? ""))) {
+          ctx.addIssue({ code: "custom", path: [i, "spokenHeading"], message: `scene "${s.id}": spokenHeading must be whole words at the start of its narration, with more narration after it` });
+        }
+        if (s.headingPauseSeconds !== undefined && !s.spokenHeading) {
+          ctx.addIssue({ code: "custom", path: [i, "headingPauseSeconds"], message: `scene "${s.id}": headingPauseSeconds needs a spokenHeading` });
         }
       }),
     ),

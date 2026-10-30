@@ -248,7 +248,9 @@ re-voicing, but a new or edited `spokenHeading` needs `pnpm voice <id>` again (a
 loading). The timeline plays the clip up to the cut, holds the pause and plays the rest; `phraseFrame`,
 `wordFrame` and captions shift with it. In `Video.tsx`, use `narrationEndFrame(scene, fps)` for the end of a
 scene's speech, not `audioFrom + audioSeconds * fps`, which ignores the pause. When no gap is found the run
-prints `heading pause: NONE`, the scene plays without a pause and `pnpm render` warns; rephrase the heading as a
+prints `heading pause: NONE` and the scene plays without a pause. `pnpm render` warns about that, and about a cut
+placed without exact word timings (an adopted clip, say); listen to those scenes. `spokenHeading` must be whole
+words, and a scene's `headingPauseSeconds` needs one. If no gap is found, rephrase the heading as a
 sentence of its own ("Answer by message." rather than "Answer by message, when...") and voice it again.
 
 **Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with

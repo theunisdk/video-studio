@@ -74,9 +74,7 @@ if (placeholders.length && !preview) {
   process.exit(1);
 }
 console.log(`voice: ${timeline.voice.label}`);
-if (timeline.headingPauseMissing.length) {
-  console.warn(`WARNING: no pause after the spoken heading in ${timeline.headingPauseMissing.join(", ")}: pnpm voice found no gap after it`);
-}
+timeline.headingPauseNotes.forEach(({ sceneId, note }) => console.warn(`WARNING: heading pause in ${sceneId}: ${note}`));
 if (timeline.voice.override) {
   console.warn(`WARNING: narrated by the one-off ${timeline.voice.provider} voice, not video.json's. To use video.json's voice: pnpm voice ${video.videoId}`);
 }

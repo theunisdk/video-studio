@@ -1,5 +1,5 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { phraseFrame, sceneById, type Timeline } from "../../src/video/timeline";
+import { narrationEndFrame, phraseFrame, sceneById, type Timeline } from "../../src/video/timeline";
 import { pop, ramp, visibleBetween } from "../../src/kit/anim";
 import { cameraAt, type CameraMove, type Vec3 } from "../../src/kit/camera";
 import { Connector, Core, Orb, ServerBox, Starfield, connectorPoint } from "../../src/kit/objects";
@@ -83,7 +83,7 @@ export const OpenClawVideo: React.FC<{ videoId: string; timeline: Timeline }> = 
     : frame >= at(software, "It receives") && frame < software.from + software.durationInFrames ? "> message received"
     : "> waiting for messages";
 
-  const outroStart = together.audioFrom + Math.ceil(together.audioSeconds * fps) + 8;
+  const outroStart = narrationEndFrame(together, fps) + 8;
   const coreLabelIn = ramp(frame, software.from + 20, 16);
 
   const world = (
