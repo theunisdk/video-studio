@@ -8,9 +8,9 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { bundle } from "@remotion/bundler";
 import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
 import { buildCues, toSrt } from "../src/video/captions";
+import { bundleForRender } from "./bundle";
 import { checkDesign } from "./design-check";
 import { loadVideos } from "./videos";
 import { copySources } from "./versions";
@@ -42,7 +42,7 @@ rmSync(stillDir, { recursive: true, force: true });
 mkdirSync(stillDir, { recursive: true });
 
 const chromiumOptions = { gl: "swangle" as const };
-const serveUrl = await bundle({ entryPoint: resolve("src/index.ts"), publicDir: resolve("videos") });
+const serveUrl = await bundleForRender();
 const inputProps = { videoId: video.videoId, timeline: video.timeline, ...(video.design ? { design: video.design } : {}) };
 const composition = await selectComposition({ serveUrl, id: video.id, inputProps, chromiumOptions });
 

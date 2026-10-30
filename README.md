@@ -190,6 +190,7 @@ pnpm restore <id> v2                       # put an earlier version's sources ba
 pnpm gallery                               # stills of every kit treatment: out/kit-gallery/
 pnpm studio                                # live preview in the browser (Remotion Studio)
 pnpm typecheck
+pnpm test                                  # unit tests for the scripts
 ```
 
 Every render is a new version (`-v1`, `-v2`, …), so earlier renders are never lost.

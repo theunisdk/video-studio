@@ -4,9 +4,9 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { bundle } from "@remotion/bundler";
 import { renderStill, selectComposition } from "@remotion/renderer";
 import { galleryCells } from "../src/gallery/cells";
+import { bundleForRender } from "./bundle";
 import { checkFonts } from "./design-check";
 
 const sections = process.argv.slice(2);
@@ -23,7 +23,7 @@ rmSync(cellDir, { recursive: true, force: true });
 mkdirSync(cellDir, { recursive: true });
 
 const chromiumOptions = { gl: "swangle" as const };
-const serveUrl = await bundle({ entryPoint: resolve("src/index.ts"), publicDir: resolve("videos") });
+const serveUrl = await bundleForRender();
 for (const c of cells) {
   const inputProps = { cell: c.id };
   const composition = await selectComposition({ serveUrl, id: "kit-gallery", inputProps, chromiumOptions });
