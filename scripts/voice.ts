@@ -6,7 +6,7 @@
 // Synthesises one clip per scene with video.json's voice provider (ElevenLabs or Kokoro) and
 // caches it by content hash, so only scenes whose narration or voice changed cost credits.
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -73,6 +73,41 @@ const clipKey = (text: string) =>
 
 const probeSeconds = (path: string) =>
   Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path]).toString().trim());
+
+// Quiet stretches of a clip, as [start, end] seconds.
+const silences = (path: string): [number, number][] => {
+  const run = spawnSync("ffmpeg", ["-hide_banner", "-i", path, "-af", "silencedetect=noise=-35dB:d=0.04", "-f", "null", "-"], { encoding: "utf8" });
+  if (run.status !== 0) throw new Error(`ffmpeg silencedetect failed on ${path}: ${run.stderr.slice(-300)}`);
+  const log = run.stderr;
+  const at = (name: string) => [...log.matchAll(new RegExp(`silence_${name}: ([0-9.]+)`, "g"))].map((m) => Number(m[1]));
+  const ends = at("end");
+  return at("start").map((start, i) => [start, ends[i] ?? probeSeconds(path)]);
+};
+
+// Where to cut the clip for the pause after its spoken heading: the middle of the gap the voice
+// left after the heading, found from the word timings when there are any, else near the
+// proportional estimate. Changing the pause length later needs no new clip.
+const headingCut = (path: string, text: string, heading: string, seconds: number, alignment: Alignment | null, silent: boolean) => {
+  const estimate = (heading.length / text.length) * seconds;
+  if (silent) return { cutSeconds: estimate };
+  const quiet = silences(path);
+  const longest = (lo: number, hi: number) =>
+    quiet.filter(([s, e]) => e > lo && s < hi && s > 0.05).sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
+  if (alignment && alignment.characters.length === text.length) {
+    const last = heading.trimEnd().length - 1;
+    const next = text.length - text.slice(heading.length).trimStart().length;
+    const lo = alignment.endSeconds[last];
+    const hi = alignment.startSeconds[next];
+    const gap = longest(lo, hi) ?? longest(lo - 0.15, hi + 0.15);
+    if (gap) return { cutSeconds: (gap[0] + gap[1]) / 2 };
+    if (hi > lo) return { cutSeconds: (lo + hi) / 2, note: "no silence found; cut between the timed words" };
+    return { cutSeconds: null, note: "no gap after the heading in the word timings" };
+  }
+  const gap = quiet
+    .filter(([s, e]) => s > 0.05 && Math.abs((s + e) / 2 - estimate) < 1)
+    .sort((a, b) => Math.abs((a[0] + a[1]) / 2 - estimate) - Math.abs((b[0] + b[1]) / 2 - estimate))[0];
+  return gap ? { cutSeconds: (gap[0] + gap[1]) / 2, note: "no word timings; cut at the nearest silence" } : { cutSeconds: null, note: "no word timings and no silence near the heading" };
+};
 
 const elevenLabs = async (voice: Extract<Voice, { provider: "elevenlabs" }>, text: string): Promise<{ audio: Buffer; alignment: Alignment | null }> => {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
@@ -172,8 +207,14 @@ for (const scene of video.scenes) {
     placeholder: usePlaceholder,
   };
   const alignment = manifest.clips[scene.id].alignment;
+  if (scene.spokenHeading) {
+    const cut = headingCut(audioPath, scene.narration, scene.spokenHeading, manifest.clips[scene.id].durationSeconds, alignment, usePlaceholder);
+    manifest.clips[scene.id].heading = { text: scene.spokenHeading, ...cut };
+  }
   const timing = !alignment ? `timing: estimated${note ? ` (${note})` : ""}` : alignment.characters.length === scene.narration.length ? "timing: exact" : "timing: estimated (alignment length mismatch)";
-  console.log(`${scene.id.padEnd(16)} ${status.padEnd(12)} ${manifest.clips[scene.id].durationSeconds.toFixed(2)}s  ${file}  ${timing}`);
+  const cut = manifest.clips[scene.id].heading;
+  const pause = !cut ? "" : cut.cutSeconds === null ? `  heading pause: NONE (${cut.note})` : `  heading cut at ${cut.cutSeconds.toFixed(2)}s${cut.note ? ` (${cut.note})` : ""}`;
+  console.log(`${scene.id.padEnd(16)} ${status.padEnd(12)} ${manifest.clips[scene.id].durationSeconds.toFixed(2)}s  ${file}  ${timing}${pause}`);
 }
 
 writeFileSync(join(videoDir, "voice.json"), JSON.stringify(manifest, null, 2) + "\n");

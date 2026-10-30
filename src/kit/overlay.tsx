@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Html5Audio, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { buildCues } from "../video/captions";
 import type { TimedScene, Timeline } from "../video/timeline";
@@ -9,14 +10,31 @@ import type { CaptionTreatment } from "../video/design";
 import { useDesign } from "./design";
 import { DesignedCaptions } from "./subtitles";
 
-/** One audio track per scene, placed where the timeline says narration starts. */
+/** One audio track per scene, placed where the timeline says narration starts; split in two around the pause after a spoken heading. */
 export const NarrationAudio: React.FC<{ videoId: string; timeline: Timeline }> = ({ videoId, timeline }) => (
   <>
-    {timeline.scenes.map((s) => (
-      <Sequence key={s.id} from={s.audioFrom} durationInFrames={Math.ceil(s.audioSeconds * timeline.fps) + 2} layout="none">
-        <Html5Audio src={staticFile(`${videoId}/audio/${s.audioFile}`)} />
-      </Sequence>
-    ))}
+    {timeline.scenes.map((s) => {
+      const src = staticFile(`${videoId}/audio/${s.audioFile}`);
+      const frames = Math.ceil(s.audioSeconds * timeline.fps) + 2;
+      const pause = s.headingPause;
+      if (!pause) {
+        return (
+          <Sequence key={s.id} from={s.audioFrom} durationInFrames={frames} layout="none">
+            <Html5Audio src={src} />
+          </Sequence>
+        );
+      }
+      return (
+        <Fragment key={s.id}>
+          <Sequence from={s.audioFrom} durationInFrames={pause.cutFrame} layout="none">
+            <Html5Audio src={src} />
+          </Sequence>
+          <Sequence from={s.audioFrom + pause.cutFrame + pause.frames} durationInFrames={frames - pause.cutFrame} layout="none">
+            <Html5Audio src={src} trimBefore={pause.cutFrame} />
+          </Sequence>
+        </Fragment>
+      );
+    })}
   </>
 );
 

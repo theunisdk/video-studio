@@ -167,6 +167,12 @@ tighten the Continuity section into real rules.
   (the site's own call to action, e.g. "Book a demo at example.com").
 - Narration: plain spoken English, 125-155 words per minute, short sentences. Each scene's narration is
   one voice clip.
+- Each scene's narration opens with its heading as a phrase of its own, then a slight pause, then the body:
+  "Answer by message. When someone asks...". Say the heading the way the screen shows it, so the spoken
+  and on-screen headings match. Mark it with `spokenHeading` (section 4); the pause is the kit's default.
+  A scene with no heading (an intro line, a call to action) needs no mark.
+- Give the viewer a moment before the first words: hold about a second on the opening scene
+  (`timing.openingLeadInSeconds`) rather than speaking over its first frame.
 
 ## 4. Write `videos/<id>/video.json`
 
@@ -179,6 +185,13 @@ label, say). In a series, follow the Continuity section's kicker rule. Copy `voi
 from the OpenClaw example unless the user asks for another voice or the series sets one. For the free voice
 (no ElevenLabs key, or the user asks for it), use `"voice": { "provider": "kokoro", "voice": "af_heart" }`. Put the user's
 original request in `brief`.
+
+`spokenHeading` is the scene's heading exactly as its narration starts ("Answer by message."); it must be the
+start of `narration`, with more narration after it. The kit holds a pause after it of `timing.headingPauseSeconds`
+(default 0.6, on top of the voice's own short gap), which a scene can change with `headingPauseSeconds` (0 turns it
+off). Other `timing` fields: `leadInSeconds` (0.35) before each scene's narration, `openingLeadInSeconds` for the
+first scene only (defaults to `leadInSeconds`), `tailSeconds` (0.9) after it, and `outroSeconds` (2) on the last
+scene. To slow a whole video, raise these and lower the voice's `speed` (section 5) before rewriting the script.
 
 ## 5. Voice
 
@@ -213,6 +226,9 @@ without touching video.json, and `pnpm render` warns that the video is not in vi
 `pnpm voice <id>` to go back. Scenes voiced with ElevenLabs before are still in `audio/`, so they come back
 `cached` with no key; any others need the key. Kokoro and ElevenLabs clips never share a cache key.
 
+**Pace.** To slow the voice itself, set `"speed"` in the ElevenLabs `settings` (0.7 to 1.2, default 1; about 0.9 is
+calmer without dragging) or Kokoro's `speed`. A new speed is a new voice, so every clip is voiced again.
+
 `pnpm voice` writes `videos/<id>/voice.json` with each clip's duration and character timings. Real audio
 durations set each scene's length; never speed speech up to fit. Placeholder clips let you build and
 preview scenes first; `pnpm render <id> --preview` renders them, and a full render refuses until real
@@ -224,6 +240,16 @@ The cache key is the text and the voice, so every scene whose narration and voic
 its word timings. When all of them match, no key is needed. That run writes this video's `voice.json`. Do not
 copy `voice.json` itself: a copied one names the source in `"videoId"`, and the video does not load until
 `pnpm voice <id>` rewrites it.
+
+**Pause after the spoken heading.** For each scene with a `spokenHeading`, `pnpm voice` finds the gap the
+voice left after it (from the word timings, else the nearest silence) and records where to cut the clip in
+`voice.json` (`heading cut at 1.60s`). The clip itself is not changed, so the pause length can change without
+re-voicing, but a new or edited `spokenHeading` needs `pnpm voice <id>` again (a stale one stops the video
+loading). The timeline plays the clip up to the cut, holds the pause and plays the rest; `phraseFrame`,
+`wordFrame` and captions shift with it. In `Video.tsx`, use `narrationEndFrame(scene, fps)` for the end of a
+scene's speech, not `audioFrom + audioSeconds * fps`, which ignores the pause. When no gap is found the run
+prints `heading pause: NONE`, the scene plays without a pause and `pnpm render` warns; rephrase the heading as a
+sentence of its own ("Answer by message." rather than "Answer by message, when...") and voice it again.
 
 **Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with
 `pnpm voice <id> --adopt <sceneId>=<file.mp3>`. The scene's narration must still say what the file says.
