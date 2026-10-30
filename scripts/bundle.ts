@@ -20,16 +20,23 @@ export const removeBundle = (dir: string) => {
   }
 };
 
+const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+let hooked = false;
+
+// A signal can end the process without an exit event, so remove the bundles now. Then step aside and
+// re-raise only when no other listener is left to end the process (Remotion's browser, execa's signal-exit).
+const onSignal = (signal: NodeJS.Signals) => {
+  owned.forEach(removeBundle);
+  owned.clear();
+  SIGNALS.forEach((s) => process.off(s, onSignal));
+  if (!process.listenerCount(signal)) process.kill(process.pid, signal);
+};
+
 export const removeOnExit = (dir: string) => {
-  if (!owned.size) {
+  if (!hooked) {
     process.once("exit", () => owned.forEach(removeBundle));
-    // Without a listener a signal ends the process without an exit event. Exit only when no one else
-    // listens: Remotion's open browser handles these itself, and then the render fails through its own path.
-    for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]] as const) {
-      process.on(signal, () => {
-        if (process.listenerCount(signal) === 1) process.exit(code);
-      });
-    }
+    SIGNALS.forEach((s) => process.on(s, onSignal));
+    hooked = true;
   }
   owned.add(dir);
 };

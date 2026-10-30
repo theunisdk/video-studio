@@ -19,4 +19,12 @@ if (how === "sigterm-handled") {
   process.once("SIGTERM", () => setTimeout(() => process.exit(1), 10));
   process.kill(process.pid, "SIGTERM"), setTimeout(() => {}, 5000);
 }
+// Stands in for execa's signal-exit: it re-raises only once it is the last listener.
+if (how === "deferring") {
+  const relay = () => {
+    if (process.listenerCount("SIGTERM") === 1) process.off("SIGTERM", relay), process.kill(process.pid, "SIGTERM");
+  };
+  process.on("SIGTERM", relay);
+  process.kill(process.pid, "SIGTERM"), setTimeout(() => {}, 5000);
+}
 if (how === "locked") chmodSync(tmpdir(), 0o555);

@@ -13,34 +13,42 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const run = (how: string) => {
-  const child = spawnSync(process.execPath, ["--import", "tsx", resolve("scripts/fixtures/bundle-exit.ts"), how], {
-    env: { ...process.env, TMPDIR: root },
-    encoding: "utf8",
-  });
-  return { code: child.status, dir: child.stdout.trim(), stderr: child.stderr };
+const fixture = resolve("scripts/fixtures/bundle-exit.ts");
+const run = (how: string, cli = false) => {
+  const [cmd, ...args] = cli ? [resolve("node_modules/.bin/tsx"), fixture, how] : [process.execPath, "--import", "tsx", fixture, how];
+  const child = spawnSync(cmd, args, { env: { ...process.env, TMPDIR: root }, encoding: "utf8" });
+  return { end: child.signal ?? child.status, dir: child.stdout.trim(), stderr: child.stderr };
 };
 
-for (const [how, code] of [["done", 0], ["exit1", 1], ["sigint", 130], ["sigterm", 143], ["sigterm-handled", 1]] as const) {
+const ends = [["done", 0], ["exit1", 1], ["sigint", "SIGINT"], ["sigterm", "SIGTERM"], ["sigterm-handled", 1], ["deferring", "SIGTERM"]] as const;
+for (const [how, end] of ends) {
   test(`removes the bundle when the render ends with ${how}`, () => {
     const r = run(how);
-    assert.equal(r.code, code, r.stderr);
+    assert.equal(r.end, end, r.stderr);
     assert.ok(r.dir.startsWith(join(root, "remotion-webpack-bundle-")));
     assert.equal(existsSync(r.dir), false);
   });
 }
 
+test("removes the bundle and exits 143 on SIGTERM under the tsx CLI", () => {
+  const r = run("sigterm", true);
+  assert.equal(r.end, 143, r.stderr);
+  assert.ok(r.dir.startsWith(join(root, "remotion-webpack-bundle-")));
+  assert.equal(existsSync(r.dir), false);
+});
+
 test("removes the bundle after a throw and still reports the error", () => {
   const r = run("throw");
-  assert.notEqual(r.code, 0);
+  assert.notEqual(r.end, 0);
   assert.match(r.stderr, /render exploded/);
   assert.equal(existsSync(r.dir), false);
 });
 
 test("removes a real bundle when the render throws after bundling", () => {
   const r = run("real");
-  assert.notEqual(r.code, 0);
+  assert.notEqual(r.end, 0);
   assert.match(r.stderr, /render exploded/);
+  assert.ok(r.dir.split("\n").at(-1)!.startsWith(join(root, "remotion-webpack-bundle-")), r.dir);
   assert.deepEqual(readdirSync(root).filter((f) => f.startsWith("remotion-webpack-bundle-")), []);
 });
 
@@ -55,7 +63,7 @@ test("leaves other sessions' bundles alone", () => {
 // Root can unlink from a read-only dir, so the removal would not fail.
 test("a bundle that cannot be removed warns but keeps the render's exit code", { skip: process.getuid?.() === 0 }, () => {
   const r = run("locked");
-  assert.equal(r.code, 0);
+  assert.equal(r.end, 0);
   assert.match(r.stderr, /WARNING: could not remove the Remotion bundle/);
   assert.equal(existsSync(r.dir), true);
 });
