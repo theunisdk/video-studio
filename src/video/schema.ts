@@ -62,7 +62,7 @@ export const videoSchema = z.object({
     .max(40)
     .superRefine((scenes, ctx) =>
       scenes.forEach((s, i) => {
-        if (s.spokenHeading && !(s.narration.startsWith(s.spokenHeading) && /\s/.test(s.narration[s.spokenHeading.length] ?? ""))) {
+        if (s.spokenHeading && !(s.narration.startsWith(s.spokenHeading) && /[^\p{L}\p{N}]/u.test(s.narration[s.spokenHeading.length] ?? ""))) {
           ctx.addIssue({ code: "custom", path: [i, "spokenHeading"], message: `scene "${s.id}": spokenHeading must be whole words at the start of its narration, with more narration after it` });
         }
         if (s.headingPauseSeconds !== undefined && !s.spokenHeading) {
@@ -125,7 +125,9 @@ export const voiceManifestSchema = z.object({
       alignment: alignmentSchema.nullable(),
       placeholder: z.boolean().default(false),
       /** Where the clip is cut for the pause after the scene's spokenHeading; cutSeconds is null when no gap was found. */
-      heading: z.object({ text: z.string(), cutSeconds: z.number().positive().nullable(), note: z.string().optional() }).optional(),
+      heading: z
+        .object({ text: z.string(), fps: z.number().int().positive(), cutSeconds: z.number().positive().nullable(), note: z.string().optional() })
+        .optional(),
     }),
   ),
 });

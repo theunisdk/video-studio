@@ -50,7 +50,7 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     if (clip.text !== scene.narration) {
       throw new Error(`Voice clip for scene "${scene.id}" is stale. Run: pnpm voice ${video.id}`);
     }
-    if (scene.spokenHeading && clip.heading?.text !== scene.spokenHeading) {
+    if (scene.spokenHeading && (clip.heading?.text !== scene.spokenHeading || clip.heading.fps !== fps)) {
       throw new Error(`The heading cut for scene "${scene.id}" is stale. Run: pnpm voice ${video.id}`);
     }
     const isLast = index === video.scenes.length - 1;
@@ -58,8 +58,8 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     const pauseFrames = Math.round((scene.headingPauseSeconds ?? timing.headingPauseSeconds) * fps);
     const cutSeconds = scene.spokenHeading ? clip.heading?.cutSeconds : null;
     const headingPause = cutSeconds && pauseFrames > 0 ? { cutFrame: Math.round(cutSeconds * fps), frames: pauseFrames } : null;
-    if (scene.spokenHeading && pauseFrames > 0 && clip.heading?.note) {
-      headingPauseNotes.push({ sceneId: scene.id, note: headingPause ? clip.heading.note : `no pause: ${clip.heading.note}` });
+    if (scene.spokenHeading && pauseFrames > 0 && (clip.heading?.note || !headingPause)) {
+      headingPauseNotes.push({ sceneId: scene.id, note: headingPause ? clip.heading!.note! : `no pause: ${clip.heading?.note ?? "no cut recorded"}` });
     }
     const seconds = Math.max(
       leadIn + clip.durationSeconds + (headingPause ? pauseFrames / fps : 0) + timing.tailSeconds + (isLast ? timing.outroSeconds : 0),
@@ -109,7 +109,7 @@ export const hasWordTimings = (scene: TimedScene): boolean =>
 export const audioFrame = (scene: TimedScene, seconds: number, fps: number): number => {
   const frame = Math.round(seconds * fps);
   const pause = scene.headingPause;
-  return scene.audioFrom + frame + (pause && frame >= pause.cutFrame ? pause.frames : 0);
+  return scene.audioFrom + frame + (pause && seconds * fps >= pause.cutFrame ? pause.frames : 0);
 };
 
 /** Absolute frame at which the scene's narration ends. */

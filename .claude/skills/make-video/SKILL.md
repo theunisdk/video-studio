@@ -244,12 +244,12 @@ copy `voice.json` itself: a copied one names the source in `"videoId"`, and the 
 **Pause after the spoken heading.** For each scene with a `spokenHeading`, `pnpm voice` finds the gap the
 voice left after it (from the word timings, else the nearest silence) and records where to cut the clip in
 `voice.json` (`heading cut at 1.60s`). The clip itself is not changed, so the pause length can change without
-re-voicing, but a new or edited `spokenHeading` needs `pnpm voice <id>` again (a stale one stops the video
+re-voicing, but a new or edited `spokenHeading`, or a new `fps`, needs `pnpm voice <id>` again (a stale one stops the video
 loading). The timeline plays the clip up to the cut, holds the pause and plays the rest; `phraseFrame`,
 `wordFrame` and captions shift with it. In `Video.tsx`, use `narrationEndFrame(scene, fps)` for the end of a
 scene's speech, not `audioFrom + audioSeconds * fps`, which ignores the pause. When no gap is found the run
-prints `heading pause: NONE` and the scene plays without a pause. `pnpm render` warns about that, and about a cut
-placed without exact word timings (an adopted clip, say); listen to those scenes. `spokenHeading` must be whole
+prints `heading pause: NONE` and the scene plays without a pause. `pnpm render` warns about that, and about any cut
+it is unsure of (no silence at the gap, or no word timings); listen to those scenes. `spokenHeading` must be whole
 words, and a scene's `headingPauseSeconds` needs one. If no gap is found, rephrase the heading as a
 sentence of its own ("Answer by message." rather than "Answer by message, when...") and voice it again.
 

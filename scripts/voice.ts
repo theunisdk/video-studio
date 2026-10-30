@@ -231,7 +231,7 @@ for (const scene of video.scenes) {
   const alignment = manifest.clips[scene.id].alignment;
   if (scene.spokenHeading) {
     const cut = headingCut(audioPath, scene.narration, scene.spokenHeading, manifest.clips[scene.id].durationSeconds, alignment, usePlaceholder, video.fps);
-    manifest.clips[scene.id].heading = { text: scene.spokenHeading, ...cut };
+    manifest.clips[scene.id].heading = { text: scene.spokenHeading, fps: video.fps, ...cut };
   }
   const timing = !alignment ? `timing: estimated${note ? ` (${note})` : ""}` : alignment.characters.length === scene.narration.length ? "timing: exact" : "timing: estimated (alignment length mismatch)";
   const cut = manifest.clips[scene.id].heading;
