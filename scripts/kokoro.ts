@@ -80,7 +80,12 @@ const loadEngine = (): { ort: Ort; phonemizer: Phonemizer } => {
     mkdirSync(tmp, { recursive: true });
     for (const name of lock) copyFileSync(join(ENGINE, name), join(tmp, name));
     try {
-      execFileSync("pnpm", ["install", "--frozen-lockfile", "--prod", "--ignore-scripts"], { cwd: tmp, stdio: ["ignore", 2, 2] });
+      execFileSync("pnpm", ["install", "--frozen-lockfile", "--prod", "--ignore-scripts"], {
+        cwd: tmp,
+        stdio: ["ignore", 2, 2],
+        // Windows runs pnpm through pnpm.cmd, which needs a shell.
+        shell: process.platform === "win32",
+      });
     } catch (e) {
       rmSync(tmp, { recursive: true, force: true });
       if ((e as NodeJS.ErrnoException).code === "ENOENT") throw new Error("Kokoro installs its engine with pnpm, which is not on PATH");
