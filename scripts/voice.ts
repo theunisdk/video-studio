@@ -105,7 +105,8 @@ const headingCut = (path: string, text: string, heading: string, seconds: number
   const tooShort = { cutSeconds: null, note: "the gap after the heading is shorter than a frame" };
   if (alignment && alignment.characters.length === text.length) {
     const lo = alignment.endSeconds[heading.trimEnd().length - 1];
-    const hi = alignment.startSeconds[text.length - text.slice(heading.length).trimStart().length];
+    const body = text.slice(heading.length).search(/[\p{L}\p{N}]/u);
+    const hi = alignment.startSeconds[body < 0 ? text.length - text.slice(heading.length).trimStart().length : heading.length + body];
     const gap = longest(lo, hi);
     if (gap) {
       const from = Math.max(gap[0], lo);
