@@ -22,7 +22,7 @@ export const elevenLabsVoiceSchema = z.object({
   settings: z.record(z.string(), z.number()).default({}),
 });
 
-/** Kokoro-82M, run offline by scripts/kokoro.py. The voice name's first letter is its language (a = US English). */
+/** Kokoro-82M, run offline by scripts/kokoro.ts. The voice name's first letter is its language (a = US English). */
 export const kokoroVoiceSchema = z.object({
   provider: z.literal("kokoro"),
   voice: z.string().regex(/^[a-z]{2}_[a-z]+$/).default("af_heart"),
@@ -67,8 +67,8 @@ export const alignmentSchema = z.object({
 export type Voice = z.infer<typeof voiceSchema>;
 export type KokoroVoice = z.infer<typeof kokoroVoiceSchema>;
 
-/** The model files scripts/kokoro.py downloads; a new model is a new voice, so it is part of the fingerprint. */
-export const KOKORO_MODEL = "kokoro-onnx 0.6.1, kokoro-v1.0.onnx";
+/** The model and engine scripts/kokoro.ts runs; a new model or phonemizer is a new voice, so it is part of the fingerprint. */
+export const KOKORO_MODEL = "Kokoro-82M-v1.0-ONNX-timestamped@dd4401a model.onnx, onnxruntime-node 1.31.1, phonemizer 1.2.1";
 
 const kokoroLangs: Record<string, string> = { a: "en-us", b: "en-gb", e: "es", f: "fr-fr", h: "hi", i: "it", j: "ja", p: "pt-br", z: "cmn" };
 export const kokoroLang = (voice: KokoroVoice): string => voice.lang ?? kokoroLangs[voice.voice[0]] ?? "en-us";

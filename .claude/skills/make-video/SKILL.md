@@ -197,14 +197,16 @@ line, e.g. `eval "$(grep '^export ELEVENLABS_API_KEY=' ~/.bashrc)"`. Never write
 one-off `pnpm voice <id> --kokoro` to test the video without spending credits, or
 `"voice": { "provider": "kokoro", "voice": "af_heart" }` in video.json to keep it. Never switch silently.
 
-**Kokoro** (Kokoro-82M, Apache-2.0) runs on this machine's CPU through `uv`, so it needs
-[uv](https://docs.astral.sh/uv/) on `PATH` and nothing else. The first run downloads Python 3.12, the locked
-packages and about 350 MB of model into `~/.cache/video-studio/kokoro` (or `$KOKORO_CACHE_DIR`); later runs
-are offline. It voices at about twice real time on 8 cores. Its clips are real narration: full renders
-accept them, and `pnpm render` prints which voice narrated the video. Settings in video.json:
+**Kokoro** (Kokoro-82M, Apache-2.0) runs on this machine's CPU in Node, so it needs nothing beyond Node, pnpm
+and ffmpeg. The first run installs its engine (onnxruntime-node and phonemizer, about 300 MB, locked in
+`scripts/kokoro-engine/`) and downloads about 330 MB of model into `~/.cache/video-studio/kokoro` (or
+`$KOKORO_CACHE_DIR`); later runs are offline. It voices at about twice real time on 8 cores. Its clips are real
+narration: full renders accept them, and `pnpm render` prints which voice narrated the video. Settings in video.json:
 `voice` (default `af_heart`; the first letter is the language, `a` US English, `b` British English; voices are
 listed at <https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md>), `speed` (0.5 to 2, default 1)
-and `lang` (an espeak language code, normally left out). A wrong name fails with the list of voices.
+and `lang` (an espeak language code, normally left out). A wrong name fails with the list of voices. Only English
+works: the phonemizer has no other language, so a voice in another one (`ef_dora`, say) fails with the languages
+it has, unless `lang` names one of them.
 
 **One-off `--kokoro`** records the Kokoro voice in `voice.json` as `override`, so previews and renders work
 without touching video.json, and `pnpm render` warns that the video is not in video.json's voice. Run plain

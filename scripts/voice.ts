@@ -120,7 +120,7 @@ const elevenLabs = async (voice: Extract<Voice, { provider: "elevenlabs" }>, tex
 const missing = video.scenes
   .filter((s) => !adopt.has(s.id) && !placeholder && !existsSync(join(audioDir, `${clipKey(s.narration)}.mp3`)))
   .map((s) => s.narration);
-const kokoro = voice.provider === "kokoro" && missing.length ? kokoroSynthesize(voice, [...new Set(missing)]) : null;
+const kokoro = voice.provider === "kokoro" && missing.length ? await kokoroSynthesize(voice, [...new Set(missing)]) : null;
 const synthesize = async (text: string) => (voice.provider === "kokoro" ? kokoro!.get(text)! : elevenLabs(voice, text));
 
 const manifest: VoiceManifest = { videoId, voiceFingerprint: voiceFingerprint(voice), ...(override ? { override } : {}), clips: {} };

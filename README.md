@@ -91,8 +91,8 @@ You need:
 - [Claude Code](https://claude.com/claude-code)
 - Node 24 and pnpm 10
 - `ffmpeg` and `ffprobe` on your `PATH`
-- an [ElevenLabs](https://elevenlabs.io) API key for the voice-over, or [uv](https://docs.astral.sh/uv/) for
-  the free offline Kokoro voice (its first run downloads about 350 MB of model into `~/.cache/video-studio/kokoro`)
+- an [ElevenLabs](https://elevenlabs.io) API key for the voice-over, or nothing more for the free offline Kokoro voice in
+  English (its first run installs about 300 MB of engine and downloads about 330 MB of model into `~/.cache/video-studio/kokoro`)
 
 No GPU is needed: 3D scenes render through SwiftShader.
 
@@ -227,6 +227,8 @@ individuals and for companies of up to three people. Larger companies need a Rem
 
 ElevenLabs voices are used under your own ElevenLabs plan. Check its terms for commercial use.
 
-The free voice is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0), run with
-[kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) (MIT), with phonemizer and espeak-ng (both GPL-3.0)
-for pronunciation. uv installs them on first use; none of them, nor the model, is shipped in this repo.
+The free voice is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0), run from its
+[timestamped ONNX export](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped) with
+[onnxruntime-node](https://www.npmjs.com/package/onnxruntime-node) (MIT), with
+[phonemizer](https://www.npmjs.com/package/phonemizer) (Apache-2.0), which bundles espeak-ng (GPL-3.0), for
+pronunciation. They install on first use into the Kokoro cache; none of them, nor the model, is shipped in this repo.
