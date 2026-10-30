@@ -125,7 +125,7 @@ const cutAfter = (path: string, text: string, spoken: string, seconds: number, a
     }
     return { cutSeconds: null, note: "no gap in the word timings" };
   }
-  const gap = quiet.filter(([s, e]) => e - s >= 0.15 && Math.abs((s + e) / 2 - estimate) < 0.5).sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
+  const gap = quiet.filter(([s, e]) => e - s >= 0.15 && Math.abs((s + e) / 2 - estimate) < Math.max(0.5, estimate * 0.08)).sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
   const cut = gap ? onFrame(gap[0], gap[1]) : null;
   return cut
     ? { cutSeconds: cut, note: "no word timings; cut at the longest silence near the estimate" }

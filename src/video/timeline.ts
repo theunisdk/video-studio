@@ -63,22 +63,26 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     }
     const isLast = index === video.scenes.length - 1;
     const leadIn = index === 0 ? (timing.openingLeadInSeconds ?? timing.leadInSeconds) : timing.leadInSeconds;
+    const breakAfter = (end: number) => end + (scene.narration.slice(end).match(/^\S*/)?.[0].length ?? 0);
     const wanted = [
       ...(scene.spokenHeading
-        ? [{ after: scene.spokenHeading, at: scene.spokenHeading.length, seconds: scene.headingPauseSeconds, cut: clip.heading }]
+        ? [{ after: scene.spokenHeading, at: breakAfter(scene.spokenHeading.length), seconds: scene.headingPauseSeconds, cut: clip.heading }]
         : []),
-      ...asked.map((p, i) => ({ ...p, at: scene.narration.indexOf(p.after) + p.after.length, cut: cuts[i] })),
+      ...asked.map((p, i) => ({ ...p, at: breakAfter(scene.narration.indexOf(p.after) + p.after.length), cut: cuts[i] })),
     ];
-    const pauses: TimedScene["pauses"] = [];
+    const pauses: (TimedScene["pauses"][number] & { after: string })[] = [];
     for (const { after, at, seconds, cut } of wanted) {
       const frames = Math.round((seconds ?? timing.headingPauseSeconds) * fps);
       if (frames <= 0) continue;
-      if (cut?.cutSeconds) pauses.push({ at, cutFrame: Math.round(cut.cutSeconds * fps), frames });
+      if (cut?.cutSeconds) pauses.push({ after, at, cutFrame: Math.round(cut.cutSeconds * fps), frames });
       if (cut?.note || !cut?.cutSeconds) pauseNotes.push({ sceneId: scene.id, after, note: cut?.cutSeconds ? cut.note! : `no pause: ${cut?.note ?? "no cut recorded"}` });
     }
     pauses.sort((a, b) => a.cutFrame - b.cutFrame);
     for (let i = pauses.length - 1; i > 0; i--) {
-      if (pauses[i].cutFrame === pauses[i - 1].cutFrame) pauses[i - 1].frames += pauses.splice(i, 1)[0].frames;
+      if (pauses[i].cutFrame !== pauses[i - 1].cutFrame) continue;
+      const [merged] = pauses.splice(i, 1);
+      pauses[i - 1].frames += merged.frames;
+      pauseNotes.push({ sceneId: scene.id, after: merged.after, note: `cut at the same point as the pause after "${pauses[i - 1].after}"; both are held there` });
     }
     const pausedFrames = pauses.reduce((sum, p) => sum + p.frames, 0);
     const seconds = Math.max(
@@ -99,7 +103,7 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
       audioSeconds: clip.durationSeconds,
       alignment: clip.alignment,
       placeholder: clip.placeholder,
-      pauses,
+      pauses: pauses.map(({ at, cutFrame, frames }) => ({ at, cutFrame, frames })),
       ...(scene.title ? { title: scene.title } : {}),
       ...(scene.transition ? { transition: scene.transition } : {}),
     };
