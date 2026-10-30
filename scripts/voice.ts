@@ -1,22 +1,39 @@
-// Usage: pnpm voice <videoId> [--adopt <sceneId>=<file.mp3> ...] [--placeholder]
+// Usage: pnpm voice <videoId> [--adopt <sceneId>=<file.mp3> ...] [--placeholder] [--kokoro[=<voice>]]
 // --placeholder writes silent clips sized to the text (~150 wpm) so scenes can be built
 // before narration exists; render refuses a full video while any are present.
-// Synthesises one clip per scene with ElevenLabs and caches it by content hash,
-// so only scenes whose narration or voice changed cost credits.
+// --kokoro voices this run with the free offline Kokoro voice (default af_heart) instead of
+// video.json's voice, without editing video.json; a plain `pnpm voice <id>` switches back.
+// Synthesises one clip per scene with video.json's voice provider (ElevenLabs or Kokoro) and
+// caches it by content hash, so only scenes whose narration or voice changed cost credits.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { videoSchema, voiceFingerprint, type Alignment, type VideoSpec, type VoiceManifest } from "../src/video/schema";
+import {
+  kokoroVoiceSchema,
+  videoSchema,
+  voiceFingerprint,
+  voiceLabel,
+  type Alignment,
+  type VideoSpec,
+  type Voice,
+  type VoiceManifest,
+} from "../src/video/schema";
+import { kokoroSynthesize } from "./kokoro";
 
 const [videoId, ...rest] = process.argv.slice(2);
-if (!videoId) throw new Error("Usage: pnpm voice <videoId> [--placeholder] [--adopt <sceneId>=<file.mp3> ...]");
+if (!videoId) throw new Error("Usage: pnpm voice <videoId> [--placeholder] [--adopt <sceneId>=<file.mp3> ...] [--kokoro[=<voice>]]");
 
 const adopt = new Map<string, string>();
 let placeholder = false;
+let kokoroFlag: string | null = null;
 for (let i = 0; i < rest.length; i++) {
   if (rest[i] === "--placeholder") {
     placeholder = true;
+    continue;
+  }
+  if (rest[i] === "--kokoro" || rest[i].startsWith("--kokoro=")) {
+    kokoroFlag = rest[i].slice("--kokoro=".length);
     continue;
   }
   if (rest[i] !== "--adopt") throw new Error(`Unknown argument ${rest[i]}`);
@@ -36,26 +53,36 @@ if (unknown.length) throw new Error(`--adopt names scenes not in video.json: ${u
 const audioDir = join(videoDir, "audio");
 mkdirSync(audioDir, { recursive: true });
 
+const flagged = kokoroFlag === null ? null : kokoroVoiceSchema.parse({ provider: "kokoro", ...(kokoroFlag ? { voice: kokoroFlag } : {}) });
+const override = flagged && voiceFingerprint(flagged) !== voiceFingerprint(video.voice) ? flagged : null;
+const voice: Voice = override ?? video.voice;
+console.log(`voice: ${voiceLabel(voice)}${override ? ` (one-off --kokoro; video.json's voice is ${video.voice.provider})` : ""}`);
+
 const clipKey = (text: string) =>
   createHash("sha256")
-    .update(JSON.stringify({ text, voice: voiceFingerprint(video.voice) }))
+    .update(JSON.stringify({ text, voice: voiceFingerprint(voice) }))
     .digest("hex")
     .slice(0, 16);
 
 const probeSeconds = (path: string) =>
   Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path]).toString().trim());
 
-const synthesize = async (text: string): Promise<{ audio: Buffer; alignment: Alignment | null }> => {
+const elevenLabs = async (voice: Extract<Voice, { provider: "elevenlabs" }>, text: string): Promise<{ audio: Buffer; alignment: Alignment | null }> => {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!key) throw new Error("ELEVENLABS_API_KEY is not set (export it first; see README)");
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(video.voice.voiceId)}/with-timestamps?output_format=mp3_44100_128`;
+  if (!key) {
+    throw new Error(
+      `ELEVENLABS_API_KEY is not set (export it first; see README). Without a key, use the free offline Kokoro voice: ` +
+        `pnpm voice ${videoId} --kokoro for a one-off test, or set "voice": { "provider": "kokoro" } in video.json`,
+    );
+  }
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice.voiceId)}/with-timestamps?output_format=mp3_44100_128`;
   for (let attempt = 1; ; attempt++) {
     let res: Response;
     try {
       res = await fetch(url, {
         method: "POST",
         headers: { "xi-api-key": key, "Content-Type": "application/json" },
-        body: JSON.stringify({ text, model_id: video.voice.modelId, voice_settings: video.voice.settings }),
+        body: JSON.stringify({ text, model_id: voice.modelId, voice_settings: voice.settings }),
         signal: AbortSignal.timeout(120_000),
       });
     } catch (e) {
@@ -82,7 +109,14 @@ const synthesize = async (text: string): Promise<{ audio: Buffer; alignment: Ali
   }
 };
 
-const manifest: VoiceManifest = { videoId, voiceFingerprint: voiceFingerprint(video.voice), clips: {} };
+// Kokoro voices every missing clip in one run of the model; ElevenLabs is asked one clip at a time.
+const missing = video.scenes
+  .filter((s) => !adopt.has(s.id) && !placeholder && !existsSync(join(audioDir, `${clipKey(s.narration)}.mp3`)))
+  .map((s) => s.narration);
+const kokoro = voice.provider === "kokoro" && missing.length ? kokoroSynthesize(voice, [...new Set(missing)]) : null;
+const synthesize = async (text: string) => (voice.provider === "kokoro" ? kokoro!.get(text)! : elevenLabs(voice, text));
+
+const manifest: VoiceManifest = { videoId, voiceFingerprint: voiceFingerprint(voice), ...(override ? { override } : {}), clips: {} };
 
 // Writes to a temp name and only keeps the clip if ffprobe can read a real duration from it.
 const storeClip = (audioPath: string, write: (tmp: string) => void) => {
@@ -103,6 +137,7 @@ for (const scene of video.scenes) {
   const audioPath = join(audioDir, file);
   const alignmentPath = join(audioDir, `${key}.alignment.json`);
   let status = "cached";
+  let note: string | null = null;
   if (adopt.has(scene.id)) {
     storeClip(audioPath, (tmp) => copyFileSync(adopt.get(scene.id)!, tmp));
     rmSync(alignmentPath, { force: true });
@@ -115,9 +150,10 @@ for (const scene of video.scenes) {
     );
     status = "placeholder";
   } else if (!existsSync(audioPath)) {
-    const { audio, alignment } = await synthesize(scene.narration);
-    storeClip(audioPath, (tmp) => writeFileSync(tmp, audio));
-    if (alignment) writeFileSync(alignmentPath, JSON.stringify(alignment));
+    const clip = await synthesize(scene.narration);
+    storeClip(audioPath, (tmp) => writeFileSync(tmp, clip.audio));
+    if (clip.alignment) writeFileSync(alignmentPath, JSON.stringify(clip.alignment));
+    note = "note" in clip ? clip.note : null;
     status = "synthesised";
   }
   manifest.clips[scene.id] = {
@@ -128,7 +164,7 @@ for (const scene of video.scenes) {
     placeholder: usePlaceholder,
   };
   const alignment = manifest.clips[scene.id].alignment;
-  const timing = !alignment ? "timing: estimated" : alignment.characters.length === scene.narration.length ? "timing: exact" : "timing: estimated (alignment length mismatch)";
+  const timing = !alignment ? `timing: estimated${note ? ` (${note})` : ""}` : alignment.characters.length === scene.narration.length ? "timing: exact" : "timing: estimated (alignment length mismatch)";
   console.log(`${scene.id.padEnd(16)} ${status.padEnd(12)} ${manifest.clips[scene.id].durationSeconds.toFixed(2)}s  ${file}  ${timing}`);
 }
 

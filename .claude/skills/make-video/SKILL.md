@@ -176,19 +176,40 @@ Schema: `src/video/schema.ts`. After `pnpm series:use` the file already holds `i
 title treatment draws `kicker` and `headline`. Leave them out when the scene speaks for itself, or when its
 title treatment is `none` and the scene does not draw them itself (a look may show the kicker as a window-tab
 label, say). In a series, follow the Continuity section's kicker rule. Copy `voice`
-from the OpenClaw example unless the user asks for another voice or the series sets one. Put the user's
+from the OpenClaw example unless the user asks for another voice or the series sets one. For the free voice
+(no ElevenLabs key, or the user asks for it), use `"voice": { "provider": "kokoro", "voice": "af_heart" }`. Put the user's
 original request in `brief`.
 
 ## 5. Voice
 
 ```bash
-pnpm voice <id>                  # needs ELEVENLABS_API_KEY in the environment
-pnpm voice <id> --placeholder    # silent clips sized to the text, no key needed
+pnpm voice <id>                      # video.json's voice; ElevenLabs needs ELEVENLABS_API_KEY in the environment
+pnpm voice <id> --kokoro             # one-off: the free offline Kokoro voice, video.json unchanged
+pnpm voice <id> --kokoro=bm_george   # the same with another Kokoro voice
+pnpm voice <id> --placeholder        # silent clips sized to the text, no key needed
 ```
 
 Clips are cached by a hash of text + voice, so only new or reworded scenes spend ElevenLabs credits. If the
 key is exported in a shell profile that non-interactive shells skip (such as `~/.bashrc`), load just that
 line, e.g. `eval "$(grep '^export ELEVENLABS_API_KEY=' ~/.bashrc)"`. Never write the key into a file.
+
+**No ElevenLabs key?** Do not stop. Tell the user the key is missing and offer the free Kokoro voice: a
+one-off `pnpm voice <id> --kokoro` to test the video without spending credits, or
+`"voice": { "provider": "kokoro", "voice": "af_heart" }` in video.json to keep it. Never switch silently.
+
+**Kokoro** (Kokoro-82M, Apache-2.0) runs on this machine's CPU through `uv`, so it needs
+[uv](https://docs.astral.sh/uv/) on `PATH` and nothing else. The first run downloads Python 3.12, the locked
+packages and about 350 MB of model into `~/.cache/video-studio/kokoro` (or `$KOKORO_CACHE_DIR`); later runs
+are offline. It voices at about twice real time on 8 cores. Its clips are real narration: full renders
+accept them, and `pnpm render` prints which voice narrated the video. Settings in video.json:
+`voice` (default `af_heart`; the first letter is the language, `a` US English, `b` British English; voices are
+listed at <https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md>), `speed` (0.5 to 2, default 1)
+and `lang` (an espeak language code, normally left out). A wrong name fails with the list of voices.
+
+**One-off `--kokoro`** records the Kokoro voice in `voice.json` as `override`, so previews and renders work
+without touching video.json, and `pnpm render` warns that the video is not in video.json's voice. Run plain
+`pnpm voice <id>` to go back: the ElevenLabs clips are still in `audio/`, so that run is all `cached` and
+needs no key. Kokoro and ElevenLabs clips never share a cache key.
 
 `pnpm voice` writes `videos/<id>/voice.json` with each clip's duration and character timings. Real audio
 durations set each scene's length; never speed speech up to fit. Placeholder clips let you build and
@@ -205,8 +226,10 @@ copy `voice.json` itself: a copied one names the source in `"videoId"`, and the 
 **Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with
 `pnpm voice <id> --adopt <sceneId>=<file.mp3>`. The scene's narration must still say what the file says.
 
-**Word timings.** ElevenLabs clips carry character timings, so effects can land on an exact word. Adopted
-or placeholder clips have none (`voice.json` prints `timing: estimated`). Without them:
+**Word timings.** ElevenLabs and Kokoro clips carry character timings, so effects can land on an exact word.
+Kokoro times each sound; `pnpm voice` lines those up with the words of the narration (it prints
+`timing: exact`). If they cannot be lined up, the clip gets none and the line says why. Adopted or
+placeholder clips have none (`voice.json` prints `timing: estimated`). Without them:
 - `highlight` captions fall back to the plain form of the same treatment (`pnpm render` prints a note);
 - `phraseFrame` estimates from the text, so a sync is right to the phrase, not the word;
 - use `hasWordTimings(scene)` or `wordFrame(...)` (returns `null`) to leave out an effect that only works on

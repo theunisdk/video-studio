@@ -73,6 +73,10 @@ if (placeholders.length && !preview) {
   console.error(`Narration is still placeholder silence for: ${placeholders.join(", ")}. Run: pnpm voice ${video.id}`);
   process.exit(1);
 }
+console.log(`voice: ${timeline.voice.label}`);
+if (timeline.voice.override) {
+  console.warn(`WARNING: narrated by the one-off ${timeline.voice.provider} voice, not video.json's. To switch back: pnpm voice ${video.videoId}`);
+}
 
 // Everything renders to temp names and is only moved into place after QA passes,
 // so out/<id>/ never mixes a new transcript with an old or failed video.
@@ -150,7 +154,7 @@ if (!preview) writeFileSync(
 );
 
 console.log(`rendered ${output} in ${((Date.now() - started) / 1000).toFixed(0)}s: ${duration.toFixed(2)}s ${v?.codec_name} ${v?.width}x${v?.height} ${a?.codec_name}`);
-console.log("QA passed: streams, size, fps and duration match the timeline");
+console.log(`QA passed: streams, size, fps and duration match the timeline; voiced by ${timeline.voice.label}${timeline.voice.override ? " (one-off)" : ""}`);
 
 // Keep what made this version, so any earlier look can be restored (pnpm restore) and rendered again.
 // The video is already in place, so a failure here is reported but does not fail the render.
