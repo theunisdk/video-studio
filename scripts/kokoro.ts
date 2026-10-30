@@ -70,7 +70,9 @@ const loadEngine = (): { ort: Ort; phonemizer: Phonemizer } => {
   if (stale.length) throw new Error(`KOKORO_MODEL in src/video/schema.ts does not name ${stale.join(", ")}; update it with the engine`);
 
   const lock = ["package.json", "pnpm-lock.yaml"];
-  const hash = createHash("sha256");
+  // Hoisted, because the folder is renamed once installed and Windows junctions hold absolute paths.
+  const args = ["install", "--frozen-lockfile", "--prod", "--ignore-scripts", "--ignore-workspace", "--config.node-linker=hoisted"];
+  const hash = createHash("sha256").update(args.join(" "));
   for (const name of lock) hash.update(engineFile(name));
   const dir = join(cacheDir(), `engine-${hash.digest("hex").slice(0, 12)}`);
   if (!existsSync(dir)) {
@@ -79,8 +81,6 @@ const loadEngine = (): { ort: Ort; phonemizer: Phonemizer } => {
     rmSync(tmp, { recursive: true, force: true });
     mkdirSync(tmp, { recursive: true });
     for (const name of lock) copyFileSync(join(ENGINE, name), join(tmp, name));
-    // Hoisted, because the folder is renamed once installed and Windows junctions hold absolute paths.
-    const args = ["install", "--frozen-lockfile", "--prod", "--ignore-scripts", "--ignore-workspace", "--config.node-linker=hoisted"];
     const options = { cwd: tmp, stdio: ["ignore", 2, 2] as ("ignore" | number)[] };
     try {
       // Windows runs pnpm through pnpm.cmd, which needs a shell.
@@ -115,7 +115,8 @@ const fetchFile = async (name: string, sha256: string): Promise<string> => {
   mkdirSync(join(path, ".."), { recursive: true });
   const part = `${path}.${process.pid}.part`;
   const res = await fetch(`${HUB}/${name}`).catch((e: Error) => {
-    throw new Error(`Downloading ${name} failed: ${(e.cause as Error | undefined)?.message ?? e.message}`);
+    const cause = e.cause as (Error & { code?: string }) | undefined;
+    throw new Error(`Downloading ${name} failed: ${cause?.message || cause?.code || e.message}`, { cause: e });
   });
   if (!res.ok || !res.body) throw new Error(`Downloading ${name} failed: HTTP ${res.status}`);
   const total = Number(res.headers.get("content-length")) || 0;
@@ -154,8 +155,9 @@ const fetchFile = async (name: string, sha256: string): Promise<string> => {
   return path;
 };
 
-// Punctuation stays as it is (the model reads it as pauses); espeak only sees the words between it.
-const PUNCTUATION = /(\s*[;:,.!?¡¿—…"«»“”(){}[\]]+\s*)+/g;
+// Punctuation stays as it is (the model reads it as pauses); espeak only sees the words between it, and reads
+// the commas and points inside numbers ("1,350", "3.14") itself.
+const PUNCTUATION = /(\s*(?:[;:!?¡¿—…"«»“”(){}[\]]|(?<!\d)[.,]|[.,](?!\d))+\s*)+/g;
 const STRESS = new Set(["ˈ", "ˌ"]);
 const isCore = (c: string) => /\p{L}/u.test(c) && !STRESS.has(c);
 
@@ -175,11 +177,7 @@ const pronounce = async (phonemizer: Phonemizer, text: string, lang: string): Pr
 };
 
 const phonemesOf = async (phonemizer: Phonemizer, text: string, lang: string, vocab: Record<string, number>): Promise<string> => {
-  const normal = text
-    .replace(/[‘’]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/(?<=\d),(?=\d{3}\b)/g, "")
-    .replace(/(?<=\d)\.(?=\d)/g, " point ");
+  const normal = text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
   let out = "";
   let at = 0;
   for (const m of normal.matchAll(PUNCTUATION)) {
