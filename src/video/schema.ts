@@ -73,7 +73,8 @@ export const videoSchema = z.object({
         if (s.headingPauseSeconds !== undefined && !s.spokenHeading) {
           ctx.addIssue({ code: "custom", path: [i, "headingPauseSeconds"], message: `scene "${s.id}": headingPauseSeconds needs a spokenHeading` });
         }
-        const ends = new Set(s.spokenHeading ? [s.spokenHeading.length] : []);
+        const breakAfter = (end: number) => end + (s.narration.slice(end).match(/^\S*/)?.[0].length ?? 0);
+        const ends = new Set(s.spokenHeading ? [breakAfter(s.spokenHeading.length)] : []);
         s.pauses?.forEach((p, j) => {
           const at = s.narration.indexOf(p.after);
           const end = at + p.after.length;
@@ -84,10 +85,10 @@ export const videoSchema = z.object({
             /^[^\p{L}\p{N}'’-]*\s/u.test(s.narration.slice(end));
           if (!whole) {
             ctx.addIssue({ code: "custom", path: [i, "pauses", j, "after"], message: `scene "${s.id}": pause after "${p.after}" must be whole words found once in its narration, followed by a space (after any punctuation) and more narration` });
-          } else if (ends.has(end)) {
+          } else if (ends.has(breakAfter(end))) {
             ctx.addIssue({ code: "custom", path: [i, "pauses", j, "after"], message: `scene "${s.id}": two pauses end at "${p.after}"` });
           }
-          ends.add(end);
+          ends.add(breakAfter(end));
         });
       }),
     ),

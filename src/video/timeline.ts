@@ -73,11 +73,17 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     const pauses: (TimedScene["pauses"][number] & { after: string })[] = [];
     for (const { after, at, seconds, cut } of wanted) {
       const frames = Math.round((seconds ?? timing.headingPauseSeconds) * fps);
-      if (frames <= 0) continue;
+      if (frames <= 0) {
+        if ((seconds ?? timing.headingPauseSeconds) > 0) pauseNotes.push({ sceneId: scene.id, after, note: "no pause: shorter than a frame" });
+        continue;
+      }
       if (cut?.cutSeconds) pauses.push({ after, at, cutFrame: Math.round(cut.cutSeconds * fps), frames });
       if (cut?.note || !cut?.cutSeconds) pauseNotes.push({ sceneId: scene.id, after, note: cut?.cutSeconds ? cut.note! : `no pause: ${cut?.note ?? "no cut recorded"}` });
     }
     pauses.sort((a, b) => a.cutFrame - b.cutFrame);
+    pauses.forEach((p, i) => {
+      if (i > 0 && p.at < pauses[i - 1].at) pauseNotes.push({ sceneId: scene.id, after: p.after, note: `cut before the pause after "${pauses[i - 1].after}", out of narration order` });
+    });
     for (let i = pauses.length - 1; i > 0; i--) {
       if (pauses[i].cutFrame !== pauses[i - 1].cutFrame) continue;
       const [merged] = pauses.splice(i, 1);
