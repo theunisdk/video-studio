@@ -8,6 +8,10 @@ export const sceneSchema = z.object({
   kicker: z.string().max(60).optional(),
   headline: z.string().trim().min(2).max(120).optional(),
   narration: z.string().trim().min(4).max(1500),
+  /** The heading the narration opens with, spoken as its own phrase; the kit holds a pause after it. */
+  spokenHeading: z.string().trim().min(2).max(120).optional(),
+  /** Overrides timing.headingPauseSeconds for this scene. */
+  headingPauseSeconds: z.number().min(0).max(3).optional(),
   minSeconds: z.number().min(0).max(120).default(0),
   /** How this scene's title shows, overriding design.title. */
   title: titleTreatmentSchema.optional(),
@@ -46,9 +50,26 @@ export const videoSchema = z.object({
       leadInSeconds: z.number().min(0).max(3).default(0.35),
       tailSeconds: z.number().min(0).max(5).default(0.9),
       outroSeconds: z.number().min(0).max(10).default(2),
+      /** Silence held after a scene's spokenHeading, on top of the voice's own gap. */
+      headingPauseSeconds: z.number().min(0).max(3).default(0.6),
+      /** Overrides leadInSeconds for the first scene, so the video can hold before the first words. */
+      openingLeadInSeconds: z.number().min(0).max(5).optional(),
     })
-    .default({ leadInSeconds: 0.35, tailSeconds: 0.9, outroSeconds: 2 }),
-  scenes: z.array(sceneSchema).min(1).max(40),
+    .default({ leadInSeconds: 0.35, tailSeconds: 0.9, outroSeconds: 2, headingPauseSeconds: 0.6 }),
+  scenes: z
+    .array(sceneSchema)
+    .min(1)
+    .max(40)
+    .superRefine((scenes, ctx) =>
+      scenes.forEach((s, i) => {
+        if (s.spokenHeading && !(s.narration.startsWith(s.spokenHeading) && /^[^\p{L}\p{N}'’-]*\s/u.test(s.narration.slice(s.spokenHeading.length)))) {
+          ctx.addIssue({ code: "custom", path: [i, "spokenHeading"], message: `scene "${s.id}": spokenHeading must be whole words at the start of its narration, followed by a space (after any punctuation) and more narration` });
+        }
+        if (s.headingPauseSeconds !== undefined && !s.spokenHeading) {
+          ctx.addIssue({ code: "custom", path: [i, "headingPauseSeconds"], message: `scene "${s.id}": headingPauseSeconds needs a spokenHeading` });
+        }
+      }),
+    ),
   /** The look: tokens the kit reads through <Designed>. Videos without one keep the kit defaults. */
   design: designSchema.optional(),
   /** The series this video's look was copied from (series/<name>/), if any. */
@@ -103,6 +124,10 @@ export const voiceManifestSchema = z.object({
       durationSeconds: z.number().positive(),
       alignment: alignmentSchema.nullable(),
       placeholder: z.boolean().default(false),
+      /** Where the clip is cut for the pause after the scene's spokenHeading; cutSeconds is null when no gap was found. */
+      heading: z
+        .object({ text: z.string(), fps: z.number().int().positive().optional(), cutSeconds: z.number().positive().nullable(), note: z.string().optional() })
+        .optional(),
     }),
   ),
 });

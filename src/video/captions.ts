@@ -1,5 +1,5 @@
 import type { Alignment } from "./schema";
-import type { Timeline } from "./timeline";
+import { audioFrame, type Timeline } from "./timeline";
 
 export type Cue = { startFrame: number; endFrame: number; text: string };
 
@@ -63,8 +63,8 @@ const cueSpans = (timeline: Timeline): Span[] => {
       cues.push({
         scene,
         start,
-        startFrame: scene.audioFrom + Math.round(startSec * timeline.fps),
-        endFrame: scene.audioFrom + Math.round(endSec * timeline.fps),
+        startFrame: audioFrame(scene, startSec, timeline.fps),
+        endFrame: audioFrame(scene, endSec, timeline.fps),
         text: chunk,
       });
     });
@@ -93,7 +93,7 @@ export const buildWordCues = (timeline: Timeline): WordCue[] =>
       from = at < 0 ? from : at + w.length;
       return {
         text: w,
-        startFrame: timed && at >= 0 ? scene.audioFrom + Math.round(a!.startSeconds[at] * timeline.fps) : null,
+        startFrame: timed && at >= 0 ? audioFrame(scene, a!.startSeconds[at], timeline.fps) : null,
       };
     });
     return { startFrame, endFrame, text, words, timed };

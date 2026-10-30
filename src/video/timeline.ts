@@ -16,6 +16,8 @@ export type TimedScene = {
   audioSeconds: number;
   alignment: Alignment | null;
   placeholder: boolean;
+  /** The pause after the spoken heading: the clip plays up to cutFrame (frames into the clip), then the rest `frames` later. */
+  headingPause: { cutFrame: number; frames: number } | null;
   title?: TitleTreatment;
   transition?: TransitionSpec;
 };
@@ -26,6 +28,8 @@ export type Timeline = {
   scenes: TimedScene[];
   /** Who voiced the narration; `override` when it was not video.json's voice (pnpm voice <id> --kokoro). */
   voice: { provider: VideoSpec["voice"]["provider"]; label: string; override: boolean };
+  /** Scenes whose pause after the spoken heading is missing or placed without exact word timings, with pnpm voice's reason. */
+  headingPauseNotes: { sceneId: string; note: string }[];
 };
 
 // Narration audio sets every scene's length; storyboard hints never trim speech.
@@ -39,15 +43,26 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     throw new Error(`Voice settings changed since the clips were made. Run: pnpm voice ${video.id}`);
   }
   let cursor = 0;
+  const headingPauseNotes: Timeline["headingPauseNotes"] = [];
   const scenes = video.scenes.map((scene, index) => {
     const clip = voice.clips[scene.id];
     if (!clip) throw new Error(`No voice clip for scene "${scene.id}". Run: pnpm voice ${video.id}`);
     if (clip.text !== scene.narration) {
       throw new Error(`Voice clip for scene "${scene.id}" is stale. Run: pnpm voice ${video.id}`);
     }
+    if (scene.spokenHeading && (clip.heading?.text !== scene.spokenHeading || clip.heading.fps !== fps)) {
+      throw new Error(`The heading cut for scene "${scene.id}" is stale. Run: pnpm voice ${video.id}`);
+    }
     const isLast = index === video.scenes.length - 1;
+    const leadIn = index === 0 ? (timing.openingLeadInSeconds ?? timing.leadInSeconds) : timing.leadInSeconds;
+    const pauseFrames = Math.round((scene.headingPauseSeconds ?? timing.headingPauseSeconds) * fps);
+    const cutSeconds = scene.spokenHeading ? clip.heading?.cutSeconds : null;
+    const headingPause = cutSeconds && pauseFrames > 0 ? { cutFrame: Math.round(cutSeconds * fps), frames: pauseFrames } : null;
+    if (scene.spokenHeading && pauseFrames > 0 && (clip.heading?.note || !headingPause)) {
+      headingPauseNotes.push({ sceneId: scene.id, note: headingPause ? clip.heading!.note! : `no pause: ${clip.heading?.note ?? "no cut recorded"}` });
+    }
     const seconds = Math.max(
-      timing.leadInSeconds + clip.durationSeconds + timing.tailSeconds + (isLast ? timing.outroSeconds : 0),
+      leadIn + clip.durationSeconds + (headingPause ? pauseFrames / fps : 0) + timing.tailSeconds + (isLast ? timing.outroSeconds : 0),
       scene.minSeconds,
     );
     const durationInFrames = Math.ceil(seconds * fps);
@@ -59,18 +74,25 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
       narration: scene.narration,
       from: cursor,
       durationInFrames,
-      audioFrom: cursor + Math.round(timing.leadInSeconds * fps),
+      audioFrom: cursor + Math.round(leadIn * fps),
       audioFile: clip.file,
       audioSeconds: clip.durationSeconds,
       alignment: clip.alignment,
       placeholder: clip.placeholder,
+      headingPause,
       ...(scene.title ? { title: scene.title } : {}),
       ...(scene.transition ? { transition: scene.transition } : {}),
     };
     cursor += durationInFrames;
     return timed;
   });
-  return { fps, durationInFrames: cursor, scenes, voice: { provider: used.provider, label: voiceLabel(used), override: !!voice.override } };
+  return {
+    fps,
+    durationInFrames: cursor,
+    scenes,
+    voice: { provider: used.provider, label: voiceLabel(used), override: !!voice.override },
+    headingPauseNotes,
+  };
 };
 
 export const sceneById = (timeline: Timeline, id: string): TimedScene => {
@@ -83,6 +105,17 @@ export const sceneById = (timeline: Timeline, id: string): TimedScene => {
 export const hasWordTimings = (scene: TimedScene): boolean =>
   !!scene.alignment && scene.alignment.characters.length === scene.narration.length;
 
+/** Absolute frame at which the clip reaches `seconds`, counting the pause after the spoken heading. */
+export const audioFrame = (scene: TimedScene, seconds: number, fps: number): number => {
+  const frame = Math.round(seconds * fps);
+  const pause = scene.headingPause;
+  return scene.audioFrom + frame + (pause && seconds * fps >= pause.cutFrame ? pause.frames : 0);
+};
+
+/** Absolute frame at which the scene's narration ends. */
+export const narrationEndFrame = (scene: TimedScene, fps: number): number =>
+  scene.audioFrom + Math.ceil(scene.audioSeconds * fps) + (scene.headingPause?.frames ?? 0);
+
 /** Absolute frame at which `phrase` starts being spoken in this scene's narration. */
 export const phraseFrame = (scene: TimedScene, phrase: string, fps: number): number => {
   const offset = scene.narration.indexOf(phrase);
@@ -92,7 +125,7 @@ export const phraseFrame = (scene: TimedScene, phrase: string, fps: number): num
     a && a.characters.length === scene.narration.length
       ? a.startSeconds[offset]
       : (offset / scene.narration.length) * scene.audioSeconds;
-  return scene.audioFrom + Math.round(seconds * fps);
+  return audioFrame(scene, seconds, fps);
 };
 
 /** Like phraseFrame, but null when the scene has no word timings, for effects that must land on the exact word. */
