@@ -13,7 +13,8 @@
     "series:use": "tsx scripts/series.ts use",
     "restore": "tsx scripts/restore.ts",
     "gallery": "tsx scripts/gallery.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test scripts/*.test.ts"
   },
   "dependencies": {
     "@react-three/fiber": "9.8.1",
