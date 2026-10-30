@@ -10,28 +10,24 @@ import type { CaptionTreatment } from "../video/design";
 import { useDesign } from "./design";
 import { DesignedCaptions } from "./subtitles";
 
-/** One audio track per scene, placed where the timeline says narration starts; split in two around the pause after a spoken heading. */
+/** One audio track per scene, placed where the timeline says narration starts; split around each pause it holds. */
 export const NarrationAudio: React.FC<{ videoId: string; timeline: Timeline }> = ({ videoId, timeline }) => (
   <>
     {timeline.scenes.map((s) => {
       const src = staticFile(`${videoId}/audio/${s.audioFile}`);
       const frames = Math.ceil(s.audioSeconds * timeline.fps) + 2;
-      const pause = s.headingPause;
-      if (!pause) {
-        return (
-          <Sequence key={s.id} from={s.audioFrom} durationInFrames={frames} layout="none">
-            <Html5Audio src={src} />
-          </Sequence>
-        );
-      }
+      const cuts = [0, ...s.pauses.map((p) => p.cutFrame)];
+      let held = 0;
       return (
         <Fragment key={s.id}>
-          <Sequence from={s.audioFrom} durationInFrames={pause.cutFrame} layout="none">
-            <Html5Audio src={src} />
-          </Sequence>
-          <Sequence from={s.audioFrom + pause.cutFrame + pause.frames} durationInFrames={frames - pause.cutFrame} layout="none">
-            <Html5Audio src={src} trimBefore={pause.cutFrame} />
-          </Sequence>
+          {cuts.map((cut, i) => {
+            held += i > 0 ? s.pauses[i - 1].frames : 0;
+            return (
+              <Sequence key={cut} from={s.audioFrom + cut + held} durationInFrames={(cuts[i + 1] ?? frames) - cut} layout="none">
+                <Html5Audio src={src} trimBefore={cut || undefined} />
+              </Sequence>
+            );
+          })}
         </Fragment>
       );
     })}

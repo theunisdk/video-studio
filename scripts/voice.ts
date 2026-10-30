@@ -88,25 +88,25 @@ const silences = (path: string): [number, number][] => {
   return spans;
 };
 
-// Where to cut the clip for the pause after its spoken heading: inside the gap the voice left after
-// the heading, found from the word timings when there are any, else from the silences near the
+// Where to cut the clip for a pause after `spoken` (the narration up to the pause): inside the gap the
+// voice left there, found from the word timings when there are any, else from the silences near the
 // proportional estimate. The cut sits on a frame boundary, where the timeline splits the clip.
 // Changing the pause length later needs no new clip.
-const headingCut = (path: string, text: string, heading: string, seconds: number, alignment: Alignment | null, silent: boolean, fps: number) => {
+const cutAfter = (path: string, text: string, spoken: string, seconds: number, alignment: Alignment | null, silent: boolean, fps: number) => {
   const onFrame = (from: number, to: number) => {
     const mid = (from + to) / 2;
     const frame = [Math.round(mid * fps), Math.ceil(from * fps), Math.floor(to * fps)].find((f) => f / fps >= from && f / fps <= to && f > 0);
     return frame === undefined ? null : frame / fps;
   };
-  const estimate = (heading.length / text.length) * seconds;
+  const estimate = (spoken.length / text.length) * seconds;
   if (silent) return { cutSeconds: Math.max(1, Math.round(estimate * fps)) / fps };
   const quiet = silences(path).filter(([s]) => s > 0.05);
   const longest = (lo: number, hi: number) => quiet.filter(([s, e]) => e > lo && s < hi).sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
-  const tooShort = { cutSeconds: null, note: "the gap after the heading is shorter than a frame" };
+  const tooShort = { cutSeconds: null, note: "the gap is shorter than a frame" };
   if (alignment && alignment.characters.length === text.length) {
-    const lo = alignment.endSeconds[heading.trimEnd().length - 1];
-    const body = text.slice(heading.length).search(/[\p{L}\p{N}]/u);
-    const hi = alignment.startSeconds[body < 0 ? text.length - text.slice(heading.length).trimStart().length : heading.length + body];
+    const lo = alignment.endSeconds[spoken.trimEnd().length - 1];
+    const body = text.slice(spoken.length).search(/[\p{L}\p{N}]/u);
+    const hi = alignment.startSeconds[body < 0 ? text.length - text.slice(spoken.length).trimStart().length : spoken.length + body];
     const gap = longest(lo, hi);
     if (gap) {
       const from = Math.max(gap[0], lo);
@@ -123,13 +123,13 @@ const headingCut = (path: string, text: string, heading: string, seconds: number
       const cut = onFrame(lo, hi);
       return cut ? { cutSeconds: cut, note: "no silence found; cut between the timed words" } : tooShort;
     }
-    return { cutSeconds: null, note: "no gap after the heading in the word timings" };
+    return { cutSeconds: null, note: "no gap in the word timings" };
   }
-  const gap = quiet.filter(([s, e]) => e - s >= 0.15 && Math.abs((s + e) / 2 - estimate) < 0.5).sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
+  const gap = quiet.filter(([s, e]) => e - s >= 0.15 && Math.abs((s + e) / 2 - estimate) < Math.max(0.5, estimate * 0.08)).sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];
   const cut = gap ? onFrame(gap[0], gap[1]) : null;
   return cut
     ? { cutSeconds: cut, note: "no word timings; cut at the longest silence near the estimate" }
-    : { cutSeconds: null, note: "no word timings and no silence near the heading" };
+    : { cutSeconds: null, note: "no word timings and no silence near the estimate" };
 };
 
 const elevenLabs = async (voice: Extract<Voice, { provider: "elevenlabs" }>, text: string): Promise<{ audio: Buffer; alignment: Alignment | null }> => {
@@ -231,12 +231,20 @@ for (const scene of video.scenes) {
   };
   const alignment = manifest.clips[scene.id].alignment;
   if (scene.spokenHeading) {
-    const cut = headingCut(audioPath, scene.narration, scene.spokenHeading, manifest.clips[scene.id].durationSeconds, alignment, usePlaceholder, video.fps);
+    const cut = cutAfter(audioPath, scene.narration, scene.spokenHeading, manifest.clips[scene.id].durationSeconds, alignment, usePlaceholder, video.fps);
     manifest.clips[scene.id].heading = { text: scene.spokenHeading, fps: video.fps, ...cut };
   }
+  if (scene.pauses?.length) {
+    manifest.clips[scene.id].pauses = scene.pauses.map(({ after }) => {
+      const spoken = scene.narration.slice(0, scene.narration.indexOf(after) + after.length);
+      return { after, fps: video.fps, ...cutAfter(audioPath, scene.narration, spoken, manifest.clips[scene.id].durationSeconds, alignment, usePlaceholder, video.fps) };
+    });
+  }
   const timing = !alignment ? `timing: estimated${note ? ` (${note})` : ""}` : alignment.characters.length === scene.narration.length ? "timing: exact" : "timing: estimated (alignment length mismatch)";
-  const cut = manifest.clips[scene.id].heading;
-  const pause = !cut ? "" : cut.cutSeconds === null ? `  heading pause: NONE (${cut.note})` : `  heading cut at ${cut.cutSeconds.toFixed(2)}s${cut.note ? ` (${cut.note})` : ""}`;
+  const { heading, pauses = [] } = manifest.clips[scene.id];
+  const describe = (label: string, cut: { cutSeconds: number | null; note?: string }) =>
+    cut.cutSeconds === null ? `  ${label} pause: NONE (${cut.note})` : `  ${label} cut at ${cut.cutSeconds.toFixed(2)}s${cut.note ? ` (${cut.note})` : ""}`;
+  const pause = (heading ? describe("heading", heading) : "") + pauses.map((p) => describe(`"${p.after}"`, p)).join("");
   console.log(`${scene.id.padEnd(16)} ${status.padEnd(12)} ${manifest.clips[scene.id].durationSeconds.toFixed(2)}s  ${file}  ${timing}${pause}`);
 }
 

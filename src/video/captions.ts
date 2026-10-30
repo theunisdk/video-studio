@@ -6,10 +6,14 @@ export type Cue = { startFrame: number; endFrame: number; text: string };
 const MAX_CHARS = 64;
 const MIN_CLAUSE = 24;
 
-// Splits on sentence ends, then on clause punctuation, then packs words into short cues.
-// Punctuation followed by a non-space ("cat .env", "ficta.sh", "2.5") stays inside the word.
-const chunkText = (text: string): string[] => {
-  const sentences = text.match(/(?:[^.!?]|[.!?](?=\S))+[.!?]*\s*/g) ?? [text];
+// Splits at the scene's pauses, then on sentence ends, then on clause punctuation, then packs words into
+// short cues. Punctuation followed by a non-space ("cat .env", "ficta.sh", "2.5") stays inside the word.
+const chunkText = (text: string, breaks: number[] = []): string[] => {
+  const edges = [0, ...breaks.filter((b) => b > 0 && b < text.length).sort((a, b) => a - b), text.length];
+  const sentences = edges
+    .slice(1)
+    .flatMap((end, i) => text.slice(edges[i], end).match(/(?:[^.!?]|[.!?](?=\S))+[.!?]*\s*/g) ?? [])
+    .filter((s) => s.trim());
   const chunks: string[] = [];
   for (const sentence of sentences) {
     let current = "";
@@ -51,7 +55,7 @@ const cueSpans = (timeline: Timeline): Span[] => {
   for (const scene of timeline.scenes) {
     const text = scene.narration;
     let searchFrom = 0;
-    const chunks = chunkText(text);
+    const chunks = chunkText(text, scene.pauses.map((p) => p.at));
     if (chunks.length === 0) throw new Error(`Scene "${scene.id}" produced no captions`);
     chunks.forEach((chunk, i) => {
       const start = text.indexOf(chunk.split(" ")[0], searchFrom);

@@ -171,6 +171,9 @@ tighten the Continuity section into real rules.
   "Answer by message. When someone asks...". Say the heading the way the screen shows it, so the spoken
   and on-screen headings match. Mark it with `spokenHeading` (section 4); the pause is the kit's default.
   A scene with no heading (an intro line, a call to action) needs no mark.
+- Pause inside a scene where a listener needs a beat: after a question the next sentence answers, before
+  a change of subject ("...save your work. Locked out? Call..."), before the closing line. Mark each with
+  `pauses` (section 4). A full stop alone often gives no audible gap.
 - Give the viewer a moment before the first words: hold about a second on the opening scene
   (`timing.openingLeadInSeconds`) rather than speaking over its first frame.
 
@@ -189,7 +192,9 @@ original request in `brief`.
 `spokenHeading` is the scene's heading exactly as its narration starts ("Answer by message."); it must be the
 start of `narration`, with more narration after it. The kit holds a pause after it of `timing.headingPauseSeconds`
 (default 0.6, on top of the voice's own short gap), which a scene can change with `headingPauseSeconds` (0 turns it
-off). Other `timing` fields: `leadInSeconds` (0.35) before each scene's narration, `openingLeadInSeconds` for the
+off). `pauses` holds more pauses inside the scene: `[{ "after": "save your work." }, { "after": "Locked out?", "seconds": 0.8 }]`.
+Each `after` is whole words found once in `narration`, followed by a space (after any punctuation) and more
+narration; `seconds` defaults to `timing.headingPauseSeconds`, and 0 turns that pause off. Other `timing` fields: `leadInSeconds` (0.35) before each scene's narration, `openingLeadInSeconds` for the
 first scene only (defaults to `leadInSeconds`), `tailSeconds` (0.9) after it, and `outroSeconds` (2) on the last
 scene. To slow a whole video, raise these and lower the voice's `speed` (section 5) before rewriting the script.
 
@@ -241,17 +246,17 @@ its word timings. When all of them match, no key is needed. That run writes this
 copy `voice.json` itself: a copied one names the source in `"videoId"`, and the video does not load until
 `pnpm voice <id>` rewrites it.
 
-**Pause after the spoken heading.** For each scene with a `spokenHeading`, `pnpm voice` finds the gap the
-voice left after it (from the word timings, else the nearest silence) and records where to cut the clip in
-`voice.json` (`heading cut at 1.60s`). The clip itself is not changed, so the pause length can change without
-re-voicing, but a new or edited `spokenHeading`, or a new `fps`, needs `pnpm voice <id>` again (a stale one stops the video
-loading). The timeline plays the clip up to the cut, holds the pause and plays the rest; `phraseFrame`,
-`wordFrame` and captions shift with it. In `Video.tsx`, use `narrationEndFrame(scene, fps)` for the end of a
+**Pauses.** For each scene's `spokenHeading` and each `pauses` phrase, `pnpm voice` finds the gap the voice left
+after it (from the word timings, else the nearest silence) and records where to cut the clip in `voice.json`
+(`heading cut at 1.60s`, `"save your work." cut at 3.10s`). The clip itself is not changed, so pause lengths can change
+without re-voicing, but a new or edited `spokenHeading` or `pauses` phrase, or a new `fps`, needs `pnpm voice <id>`
+again (a stale one stops the video loading). The timeline plays the clip up to each cut, holds the pause and plays
+on; `phraseFrame`, `wordFrame` and captions shift with it, and a caption never runs across a pause. In `Video.tsx`, use `narrationEndFrame(scene, fps)` for the end of a
 scene's speech, not `audioFrom + audioSeconds * fps`, which ignores the pause. When no gap is found the run
-prints `heading pause: NONE` and the scene plays without a pause. `pnpm render` warns about that, and about any cut
+prints `pause: NONE` for it (`heading pause: NONE` for the heading) and the scene plays on without that pause. `pnpm render` warns about that, and about any cut
 it is unsure of (no silence at the gap, or no word timings); listen to those scenes. `spokenHeading` must be whole
-words followed by a space ("Answer by message," before " when" is fine, "message—when" is not), and a scene's `headingPauseSeconds` needs one. If no gap is found, rephrase the heading as a
-sentence of its own ("Answer by message." rather than "Answer by message, when...") and voice it again.
+words followed by a space ("Answer by message," before " when" is fine, "message—when" is not), and a scene's `headingPauseSeconds` needs one. If no gap is found, end the phrase with a full stop
+("Answer by message." rather than "Answer by message, when...") and voice it again.
 
 **Adopted clips** are audio files from outside ElevenLabs (a recording, say), brought in with
 `pnpm voice <id> --adopt <sceneId>=<file.mp3>`. The scene's narration must still say what the file says.

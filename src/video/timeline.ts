@@ -16,8 +16,11 @@ export type TimedScene = {
   audioSeconds: number;
   alignment: Alignment | null;
   placeholder: boolean;
-  /** The pause after the spoken heading: the clip plays up to cutFrame (frames into the clip), then the rest `frames` later. */
-  headingPause: { cutFrame: number; frames: number } | null;
+  /**
+   * Pauses held mid-clip, after the spoken heading and each `pauses` phrase, in clip order: the clip plays up to
+   * cutFrame (frames into the clip), then resumes `frames` later. `at` is the narration offset where the pause falls.
+   */
+  pauses: { at: number; cutFrame: number; frames: number }[];
   title?: TitleTreatment;
   transition?: TransitionSpec;
 };
@@ -28,8 +31,8 @@ export type Timeline = {
   scenes: TimedScene[];
   /** Who voiced the narration; `override` when it was not video.json's voice (pnpm voice <id> --kokoro). */
   voice: { provider: VideoSpec["voice"]["provider"]; label: string; override: boolean };
-  /** Scenes whose pause after the spoken heading is missing or placed without exact word timings, with pnpm voice's reason. */
-  headingPauseNotes: { sceneId: string; note: string }[];
+  /** Pauses that are missing or placed without exact word timings, with pnpm voice's reason. */
+  pauseNotes: { sceneId: string; after: string; note: string }[];
 };
 
 // Narration audio sets every scene's length; storyboard hints never trim speech.
@@ -43,7 +46,7 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     throw new Error(`Voice settings changed since the clips were made. Run: pnpm voice ${video.id}`);
   }
   let cursor = 0;
-  const headingPauseNotes: Timeline["headingPauseNotes"] = [];
+  const pauseNotes: Timeline["pauseNotes"] = [];
   const scenes = video.scenes.map((scene, index) => {
     const clip = voice.clips[scene.id];
     if (!clip) throw new Error(`No voice clip for scene "${scene.id}". Run: pnpm voice ${video.id}`);
@@ -53,16 +56,43 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     if (scene.spokenHeading && (clip.heading?.text !== scene.spokenHeading || clip.heading.fps !== fps)) {
       throw new Error(`The heading cut for scene "${scene.id}" is stale. Run: pnpm voice ${video.id}`);
     }
+    const asked = scene.pauses ?? [];
+    const cuts = clip.pauses ?? [];
+    if (asked.length !== cuts.length || asked.some((p, i) => cuts[i].after !== p.after || cuts[i].fps !== fps)) {
+      throw new Error(`The pause cuts for scene "${scene.id}" are stale. Run: pnpm voice ${video.id}`);
+    }
     const isLast = index === video.scenes.length - 1;
     const leadIn = index === 0 ? (timing.openingLeadInSeconds ?? timing.leadInSeconds) : timing.leadInSeconds;
-    const pauseFrames = Math.round((scene.headingPauseSeconds ?? timing.headingPauseSeconds) * fps);
-    const cutSeconds = scene.spokenHeading ? clip.heading?.cutSeconds : null;
-    const headingPause = cutSeconds && pauseFrames > 0 ? { cutFrame: Math.round(cutSeconds * fps), frames: pauseFrames } : null;
-    if (scene.spokenHeading && pauseFrames > 0 && (clip.heading?.note || !headingPause)) {
-      headingPauseNotes.push({ sceneId: scene.id, note: headingPause ? clip.heading!.note! : `no pause: ${clip.heading?.note ?? "no cut recorded"}` });
+    const breakAfter = (end: number) => end + (scene.narration.slice(end).match(/^\S*/)?.[0].length ?? 0);
+    const wanted = [
+      ...(scene.spokenHeading
+        ? [{ after: scene.spokenHeading, at: breakAfter(scene.spokenHeading.length), seconds: scene.headingPauseSeconds, cut: clip.heading }]
+        : []),
+      ...asked.map((p, i) => ({ ...p, at: breakAfter(scene.narration.indexOf(p.after) + p.after.length), cut: cuts[i] })),
+    ];
+    const pauses: (TimedScene["pauses"][number] & { after: string })[] = [];
+    for (const { after, at, seconds, cut } of wanted) {
+      const frames = Math.round((seconds ?? timing.headingPauseSeconds) * fps);
+      if (frames <= 0) {
+        if ((seconds ?? timing.headingPauseSeconds) > 0) pauseNotes.push({ sceneId: scene.id, after, note: "no pause: shorter than a frame" });
+        continue;
+      }
+      if (cut?.cutSeconds) pauses.push({ after, at, cutFrame: Math.round(cut.cutSeconds * fps), frames });
+      if (cut?.note || !cut?.cutSeconds) pauseNotes.push({ sceneId: scene.id, after, note: cut?.cutSeconds ? cut.note! : `no pause: ${cut?.note ?? "no cut recorded"}` });
     }
+    pauses.sort((a, b) => a.cutFrame - b.cutFrame || a.at - b.at);
+    pauses.forEach((p, i) => {
+      if (i > 0 && p.at < pauses[i - 1].at) pauseNotes.push({ sceneId: scene.id, after: p.after, note: `cut after the pause after "${pauses[i - 1].after}", though it comes earlier in the narration` });
+    });
+    for (let i = pauses.length - 1; i > 0; i--) {
+      if (pauses[i].cutFrame !== pauses[i - 1].cutFrame) continue;
+      const [merged] = pauses.splice(i, 1);
+      pauses[i - 1].frames += merged.frames;
+      pauseNotes.push({ sceneId: scene.id, after: merged.after, note: `cut at the same point as the pause after "${pauses[i - 1].after}"; both are held there` });
+    }
+    const pausedFrames = pauses.reduce((sum, p) => sum + p.frames, 0);
     const seconds = Math.max(
-      leadIn + clip.durationSeconds + (headingPause ? pauseFrames / fps : 0) + timing.tailSeconds + (isLast ? timing.outroSeconds : 0),
+      leadIn + clip.durationSeconds + pausedFrames / fps + timing.tailSeconds + (isLast ? timing.outroSeconds : 0),
       scene.minSeconds,
     );
     const durationInFrames = Math.ceil(seconds * fps);
@@ -79,7 +109,7 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
       audioSeconds: clip.durationSeconds,
       alignment: clip.alignment,
       placeholder: clip.placeholder,
-      headingPause,
+      pauses: pauses.map(({ at, cutFrame, frames }) => ({ at, cutFrame, frames })),
       ...(scene.title ? { title: scene.title } : {}),
       ...(scene.transition ? { transition: scene.transition } : {}),
     };
@@ -91,7 +121,7 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     durationInFrames: cursor,
     scenes,
     voice: { provider: used.provider, label: voiceLabel(used), override: !!voice.override },
-    headingPauseNotes,
+    pauseNotes,
   };
 };
 
@@ -105,16 +135,15 @@ export const sceneById = (timeline: Timeline, id: string): TimedScene => {
 export const hasWordTimings = (scene: TimedScene): boolean =>
   !!scene.alignment && scene.alignment.characters.length === scene.narration.length;
 
-/** Absolute frame at which the clip reaches `seconds`, counting the pause after the spoken heading. */
-export const audioFrame = (scene: TimedScene, seconds: number, fps: number): number => {
-  const frame = Math.round(seconds * fps);
-  const pause = scene.headingPause;
-  return scene.audioFrom + frame + (pause && seconds * fps >= pause.cutFrame ? pause.frames : 0);
-};
+/** Absolute frame at which the clip reaches `seconds`, counting the pauses held before that point. */
+export const audioFrame = (scene: TimedScene, seconds: number, fps: number): number =>
+  scene.audioFrom +
+  Math.round(seconds * fps) +
+  scene.pauses.reduce((sum, p) => (seconds * fps >= p.cutFrame ? sum + p.frames : sum), 0);
 
 /** Absolute frame at which the scene's narration ends. */
 export const narrationEndFrame = (scene: TimedScene, fps: number): number =>
-  scene.audioFrom + Math.ceil(scene.audioSeconds * fps) + (scene.headingPause?.frames ?? 0);
+  scene.audioFrom + Math.ceil(scene.audioSeconds * fps) + scene.pauses.reduce((sum, p) => sum + p.frames, 0);
 
 /** Absolute frame at which `phrase` starts being spoken in this scene's narration. */
 export const phraseFrame = (scene: TimedScene, phrase: string, fps: number): number => {
