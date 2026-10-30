@@ -1,5 +1,5 @@
 import type { TitleTreatment, TransitionSpec } from "./design";
-import { voiceFingerprint, type Alignment, type VideoSpec, type VoiceManifest } from "./schema";
+import { voiceFingerprint, voiceLabel, type Alignment, type VideoSpec, type VoiceManifest } from "./schema";
 
 export type TimedScene = {
   id: string;
@@ -24,6 +24,8 @@ export type Timeline = {
   fps: number;
   durationInFrames: number;
   scenes: TimedScene[];
+  /** Who voiced the narration; `override` when it was not video.json's voice (pnpm voice <id> --kokoro). */
+  voice: { provider: VideoSpec["voice"]["provider"]; label: string; override: boolean };
 };
 
 // Narration audio sets every scene's length; storyboard hints never trim speech.
@@ -32,7 +34,8 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
   if (voice.videoId !== video.id) {
     throw new Error(`voice.json was made for video "${voice.videoId}", not "${video.id}". Run: pnpm voice ${video.id}`);
   }
-  if (voice.voiceFingerprint !== voiceFingerprint(video.voice)) {
+  const used = voice.override ?? video.voice;
+  if (voice.voiceFingerprint !== voiceFingerprint(used)) {
     throw new Error(`Voice settings changed since the clips were made. Run: pnpm voice ${video.id}`);
   }
   let cursor = 0;
@@ -67,7 +70,7 @@ export const buildTimeline = (video: VideoSpec, voice: VoiceManifest): Timeline 
     cursor += durationInFrames;
     return timed;
   });
-  return { fps, durationInFrames: cursor, scenes };
+  return { fps, durationInFrames: cursor, scenes, voice: { provider: used.provider, label: voiceLabel(used), override: !!voice.override } };
 };
 
 export const sceneById = (timeline: Timeline, id: string): TimedScene => {
@@ -76,7 +79,7 @@ export const sceneById = (timeline: Timeline, id: string): TimedScene => {
   return scene;
 };
 
-/** True when the scene's narration has character timings that match its text (real ElevenLabs alignment). */
+/** True when the scene's narration has character timings that match its text (ElevenLabs or Kokoro alignment). */
 export const hasWordTimings = (scene: TimedScene): boolean =>
   !!scene.alignment && scene.alignment.characters.length === scene.narration.length;
 

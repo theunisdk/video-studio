@@ -15,6 +15,24 @@ export const sceneSchema = z.object({
   transition: transitionSchema.optional(),
 });
 
+export const elevenLabsVoiceSchema = z.object({
+  provider: z.literal("elevenlabs"),
+  voiceId: z.string().min(1),
+  modelId: z.string().min(1),
+  settings: z.record(z.string(), z.number()).default({}),
+});
+
+/** Kokoro-82M, run offline by scripts/kokoro.py. The voice name's first letter is its language (a = US English). */
+export const kokoroVoiceSchema = z.object({
+  provider: z.literal("kokoro"),
+  voice: z.string().regex(/^[a-z]{2}_[a-z]+$/).default("af_heart"),
+  speed: z.number().min(0.5).max(2).default(1),
+  /** espeak language code; defaults from the voice name. */
+  lang: z.string().min(2).optional(),
+});
+
+export const voiceSchema = z.discriminatedUnion("provider", [elevenLabsVoiceSchema, kokoroVoiceSchema]);
+
 export const videoSchema = z.object({
   id,
   title: z.string().min(3).max(120),
@@ -22,12 +40,7 @@ export const videoSchema = z.object({
   fps: z.union([z.literal(24), z.literal(25), z.literal(30), z.literal(60)]).default(30),
   width: z.number().int().min(640).max(3840).default(1920),
   height: z.number().int().min(360).max(2160).default(1080),
-  voice: z.object({
-    provider: z.literal("elevenlabs"),
-    voiceId: z.string().min(1),
-    modelId: z.string().min(1),
-    settings: z.record(z.string(), z.number()).default({}),
-  }),
+  voice: voiceSchema,
   timing: z
     .object({
       leadInSeconds: z.number().min(0).max(3).default(0.35),
@@ -51,17 +64,37 @@ export const alignmentSchema = z.object({
   endSeconds: z.array(z.number()),
 });
 
-/** Stable text for a voice config; settings keys are sorted so reordering video.json changes nothing. */
-export const voiceFingerprint = (voice: VideoSpec["voice"]): string =>
-  JSON.stringify({
-    voiceId: voice.voiceId,
-    modelId: voice.modelId,
-    settings: Object.fromEntries(Object.entries(voice.settings).sort(([a], [b]) => a.localeCompare(b))),
-  });
+export type Voice = z.infer<typeof voiceSchema>;
+export type KokoroVoice = z.infer<typeof kokoroVoiceSchema>;
+
+/** The model files scripts/kokoro.py downloads; a new model is a new voice, so it is part of the fingerprint. */
+export const KOKORO_MODEL = "kokoro-onnx 0.6.1, kokoro-v1.0.onnx";
+
+const kokoroLangs: Record<string, string> = { a: "en-us", b: "en-gb", e: "es", f: "fr-fr", h: "hi", i: "it", j: "ja", p: "pt-br", z: "cmn" };
+export const kokoroLang = (voice: KokoroVoice): string => voice.lang ?? kokoroLangs[voice.voice[0]] ?? "en-us";
+
+/** One line naming the voice, for logs and QA output. */
+export const voiceLabel = (voice: Voice): string =>
+  voice.provider === "elevenlabs" ? `elevenlabs ${voice.voiceId} (${voice.modelId})` : `kokoro ${voice.voice} (${kokoroLang(voice)}, speed ${voice.speed})`;
+
+/**
+ * Stable text for a voice config; settings keys are sorted so reordering video.json changes nothing.
+ * The ElevenLabs form predates the other providers and must stay exactly as it is: every cached clip is keyed by it.
+ */
+export const voiceFingerprint = (voice: Voice): string =>
+  voice.provider === "elevenlabs"
+    ? JSON.stringify({
+        voiceId: voice.voiceId,
+        modelId: voice.modelId,
+        settings: Object.fromEntries(Object.entries(voice.settings).sort(([a], [b]) => a.localeCompare(b))),
+      })
+    : JSON.stringify({ provider: "kokoro", model: KOKORO_MODEL, voice: voice.voice, speed: voice.speed, lang: kokoroLang(voice) });
 
 export const voiceManifestSchema = z.object({
   videoId: id,
   voiceFingerprint: z.string(),
+  /** The voice that made these clips when it is not video.json's (pnpm voice <id> --kokoro). */
+  override: voiceSchema.optional(),
   clips: z.record(
     z.string(),
     z.object({

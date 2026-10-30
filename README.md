@@ -26,7 +26,7 @@ recorded the voice-over and built the scenes. Its sources are in [`videos/gettin
 
 Every video gets:
 
-- natural narration from ElevenLabs
+- natural narration from ElevenLabs, or from the free Kokoro voice running on your own machine
 - captions burned into the picture, plus an `.srt` file
 - a script as Markdown
 - loudness-normalised audio (-16 LUFS)
@@ -66,7 +66,7 @@ design ──── a look for this video: palette, type, titles,       videos/<
 script ──── scenes with narration, headlines, sources noted     videos/<id>/video.json, NOTES.md
    │
    ▼
-voice ───── one ElevenLabs clip per scene, with word timings    videos/<id>/audio, voice.json
+voice ───── one word-timed clip per scene: ElevenLabs or Kokoro videos/<id>/audio, voice.json
    │
    ▼
 scenes ──── React + Three.js in Remotion, synced to the words   videos/<id>/Video.tsx
@@ -91,7 +91,8 @@ You need:
 - [Claude Code](https://claude.com/claude-code)
 - Node 24 and pnpm 10
 - `ffmpeg` and `ffprobe` on your `PATH`
-- an [ElevenLabs](https://elevenlabs.io) API key for the voice-over
+- an [ElevenLabs](https://elevenlabs.io) API key for the voice-over, or [uv](https://docs.astral.sh/uv/) for
+  the free offline Kokoro voice (its first run downloads about 350 MB of model into `~/.cache/video-studio/kokoro`)
 
 No GPU is needed: 3D scenes render through SwiftShader.
 
@@ -100,7 +101,7 @@ git clone https://github.com/theunisdk/video-studio.git
 cd video-studio
 pnpm install
 pnpm exec playwright install chromium     # only for website and app screenshots
-export ELEVENLABS_API_KEY=...             # or keep it in a secrets manager; never commit it
+export ELEVENLABS_API_KEY=...             # or keep it in a secrets manager; never commit it. Without one, use Kokoro
 ```
 
 Render the OpenClaw example to check your setup. It takes a few minutes and writes a new version next to the committed one, `out/openclaw/openclaw-v3.mp4`:
@@ -177,6 +178,7 @@ You rarely need these, because Claude runs them. They are here for when you want
 ```bash
 pnpm capture-site <id> <url> [<url> ...]   # screenshots + page text into videos/<id>/research/
 pnpm voice <id>                            # make narration clips (cached: only changed lines cost credits)
+pnpm voice <id> --kokoro                   # one-off test with the free offline Kokoro voice; plain pnpm voice switches back
 pnpm voice <id> --placeholder              # silent clips, to build scenes before narration exists
 pnpm render <id> --stills-only             # storyboard stills + out/<id>/stills/contact.jpg
 pnpm render <id> --preview                 # render with placeholder narration
@@ -224,3 +226,7 @@ individuals and for companies of up to three people. Larger companies need a Rem
 (see <https://www.remotion.dev/docs/license>).
 
 ElevenLabs voices are used under your own ElevenLabs plan. Check its terms for commercial use.
+
+The free voice is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0), run with
+[kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) (MIT), with phonemizer and espeak-ng (both GPL-3.0)
+for pronunciation. uv installs them on first use; none of them, nor the model, is shipped in this repo.
