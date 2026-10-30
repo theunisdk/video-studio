@@ -12,6 +12,11 @@ export const sceneSchema = z.object({
   spokenHeading: z.string().trim().min(2).max(120).optional(),
   /** Overrides timing.headingPauseSeconds for this scene. */
   headingPauseSeconds: z.number().min(0).max(3).optional(),
+  /** Phrases in the narration to hold a pause after, mid-scene; seconds defaults to timing.headingPauseSeconds. */
+  pauses: z
+    .array(z.object({ after: z.string().trim().min(2).max(200), seconds: z.number().min(0).max(3).optional() }))
+    .max(10)
+    .optional(),
   minSeconds: z.number().min(0).max(120).default(0),
   /** How this scene's title shows, overriding design.title. */
   title: titleTreatmentSchema.optional(),
@@ -68,6 +73,22 @@ export const videoSchema = z.object({
         if (s.headingPauseSeconds !== undefined && !s.spokenHeading) {
           ctx.addIssue({ code: "custom", path: [i, "headingPauseSeconds"], message: `scene "${s.id}": headingPauseSeconds needs a spokenHeading` });
         }
+        const ends = new Set(s.spokenHeading ? [s.spokenHeading.length] : []);
+        s.pauses?.forEach((p, j) => {
+          const at = s.narration.indexOf(p.after);
+          const end = at + p.after.length;
+          const whole =
+            at >= 0 &&
+            s.narration.indexOf(p.after, at + 1) < 0 &&
+            !/[\p{L}\p{N}'’-]/u.test(s.narration[at - 1] ?? "") &&
+            /^[^\p{L}\p{N}'’-]*\s/u.test(s.narration.slice(end));
+          if (!whole) {
+            ctx.addIssue({ code: "custom", path: [i, "pauses", j, "after"], message: `scene "${s.id}": pause after "${p.after}" must be whole words found once in its narration, followed by a space (after any punctuation) and more narration` });
+          } else if (ends.has(end)) {
+            ctx.addIssue({ code: "custom", path: [i, "pauses", j, "after"], message: `scene "${s.id}": two pauses end at "${p.after}"` });
+          }
+          ends.add(end);
+        });
       }),
     ),
   /** The look: tokens the kit reads through <Designed>. Videos without one keep the kit defaults. */
@@ -127,6 +148,10 @@ export const voiceManifestSchema = z.object({
       /** Where the clip is cut for the pause after the scene's spokenHeading; cutSeconds is null when no gap was found. */
       heading: z
         .object({ text: z.string(), fps: z.number().int().positive().optional(), cutSeconds: z.number().positive().nullable(), note: z.string().optional() })
+        .optional(),
+      /** Where the clip is cut for each of the scene's pauses, in the scene's order. */
+      pauses: z
+        .array(z.object({ after: z.string(), fps: z.number().int().positive(), cutSeconds: z.number().positive().nullable(), note: z.string().optional() }))
         .optional(),
     }),
   ),
