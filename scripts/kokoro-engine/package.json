@@ -1,0 +1,10 @@
+{
+  "name": "video-studio-kokoro-engine",
+  "private": true,
+  "description": "The Kokoro voice's runtime. scripts/kokoro.ts installs it on first use into the Kokoro cache, never into this repo.",
+  "packageManager": "pnpm@10.34.4",
+  "dependencies": {
+    "onnxruntime-node": "1.31.1",
+    "phonemizer": "1.2.1"
+  }
+}
