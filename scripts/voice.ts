@@ -57,7 +57,10 @@ mkdirSync(audioDir, { recursive: true });
 const flagged =
   kokoroFlag === null
     ? null
-    : kokoroVoiceSchema.parse({ ...(video.voice.provider === "kokoro" ? video.voice : { provider: "kokoro" }), ...(kokoroFlag ? { voice: kokoroFlag } : {}) });
+    : kokoroVoiceSchema.parse({
+        ...(video.voice.provider === "kokoro" ? video.voice : { provider: "kokoro" }),
+        ...(kokoroFlag ? { voice: kokoroFlag, lang: undefined } : {}),
+      });
 const override = flagged && voiceFingerprint(flagged) !== voiceFingerprint(video.voice) ? flagged : null;
 const voice: Voice = override ?? video.voice;
 console.log(`voice: ${voiceLabel(voice)}${override ? ` (one-off --kokoro; video.json's voice is ${video.voice.provider})` : ""}`);
@@ -155,9 +158,9 @@ for (const scene of video.scenes) {
     status = "placeholder";
   } else if (!existsSync(audioPath)) {
     const clip = await synthesize(scene.narration);
+    rmSync(alignmentPath, { force: true });
     storeClip(audioPath, (tmp) => writeFileSync(tmp, clip.audio));
     if (clip.alignment) writeFileSync(alignmentPath, JSON.stringify(clip.alignment));
-    else rmSync(alignmentPath, { force: true });
     note = "note" in clip ? clip.note : null;
     status = "synthesised";
   }

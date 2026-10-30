@@ -52,20 +52,24 @@ export const kokoroSynthesize = (voice: KokoroVoice, texts: string[]): Map<strin
       }
       throw new Error(`Kokoro failed (scripts/kokoro.py); its error is above`);
     }
-    let result: { items: { words: [number, number][] | null; note: string | null }[] };
+    let result: { items?: { words?: [number, number][] | null; note: string | null }[] } | null;
     try {
       result = JSON.parse(stdout.toString());
     } catch {
       throw new Error(`Kokoro returned malformed output: ${stdout.toString().slice(0, 300)}`);
     }
-    const bad = result.items?.length !== texts.length || result.items.some((r, i) => r.words !== null && r.words.length !== words[i].length);
+    const replies = result?.items;
+    const bad =
+      !Array.isArray(replies) ||
+      replies.length !== texts.length ||
+      replies.some((r, i) => r?.words !== null && (!Array.isArray(r?.words) || r.words.length !== words[i].length));
     if (bad) throw new Error("Kokoro returned malformed output: its clips or word timings do not match the request");
     return new Map(
       texts.map((text, i) => {
         const mp3 = join(dir, `${i}.mp3`);
         execFileSync("ffmpeg", ["-v", "error", "-y", "-i", items[i].wav, "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", mp3]);
-        const spans = result.items[i].words;
-        return [text, { audio: readFileSync(mp3), alignment: spans ? wordAlignment(text, words[i], spans) : null, note: result.items[i].note }];
+        const spans = replies[i].words;
+        return [text, { audio: readFileSync(mp3), alignment: spans ? wordAlignment(text, words[i], spans) : null, note: replies[i].note }];
       }),
     );
   } finally {

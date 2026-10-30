@@ -60,7 +60,7 @@ def fetch(name: str, sha256: str, folder: Path) -> Path:
                 shown = pct
     if digest.hexdigest() != sha256:
         part.unlink()
-        raise SystemExit(f"{name} failed its checksum (download corrupted or changed upstream); run again")
+        raise SystemExit(f"{name} failed its checksum; run again, and if it fails again the release file changed upstream")
     part.rename(path)
     return path
 
